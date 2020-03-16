@@ -610,27 +610,41 @@ void setup() {
   sei();
 }
 
-void handlePacket(TPacket *packet)
+void handleCommand(TPacket *command)
 {
-  switch(packet->packetType)
+  switch(command->command)
   {
-    case PACKET_TYPE_COMMAND:
-      handleCommand(packet);
+    // For movement commands, param[0] = distance, param[1] = speed.
+    case COMMAND_FORWARD:
+        sendOK();
+        forward((float) command->params[0], (float) command->params[1]);
       break;
 
-    case PACKET_TYPE_RESPONSE:
+    case COMMAND_REVERSE:
+        sendOK();
+        reverse((float) command->params[0], (float) command->params[1]);
       break;
 
-    case PACKET_TYPE_ERROR:
+    case COMMAND_TURN_LEFT:
+        sendOK();
+        left((float) command->params[0], (float) command->params[1]);
       break;
 
-    case PACKET_TYPE_MESSAGE:
+    case COMMAND_TURN_RIGHT:
+        sendOK();
+        right((float) command->params[0], (float) command->params[1]);
       break;
 
-    case PACKET_TYPE_HELLO:
+    case COMMAND_STOP:
+        sendOK();
+        stop();
       break;
+        
+    default:
+      sendBadCommand();
   }
 }
+
 
 void loop() {
 
