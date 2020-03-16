@@ -549,10 +549,25 @@ void handleCommand(TPacket *command)
         forward((float) command->params[0], (float) command->params[1]);
       break;
 
-    /*
-     * Implement code for other commands here.
-     * 
-     */
+    case COMMAND_REVERSE:
+        sendOK();
+        reverse((float) command->params[0], (float) command->params[1]);
+      break;
+
+    case COMMAND_TURN_LEFT:
+        sendOK();
+        left((float) command->params[0], (float) command->params[1]);
+      break;
+
+    case COMMAND_TURN_RIGHT:
+        sendOK();
+        right((float) command->params[0], (float) command->params[1]);
+      break;
+
+    case COMMAND_STOP:
+        sendOK();
+        stop();
+      break;
         
     default:
       sendBadCommand();
@@ -610,38 +625,25 @@ void setup() {
   sei();
 }
 
-void handleCommand(TPacket *command)
+void handlePacket(TPacket *packet)
 {
-  switch(command->command)
+  switch(packet->packetType)
   {
-    // For movement commands, param[0] = distance, param[1] = speed.
-    case COMMAND_FORWARD:
-        sendOK();
-        forward((float) command->params[0], (float) command->params[1]);
+    case PACKET_TYPE_COMMAND:
+      handleCommand(packet);
       break;
 
-    case COMMAND_REVERSE:
-        sendOK();
-        reverse((float) command->params[0], (float) command->params[1]);
+    case PACKET_TYPE_RESPONSE:
       break;
 
-    case COMMAND_TURN_LEFT:
-        sendOK();
-        left((float) command->params[0], (float) command->params[1]);
+    case PACKET_TYPE_ERROR:
       break;
 
-    case COMMAND_TURN_RIGHT:
-        sendOK();
-        right((float) command->params[0], (float) command->params[1]);
+    case PACKET_TYPE_MESSAGE:
       break;
 
-    case COMMAND_STOP:
-        sendOK();
-        stop();
+    case PACKET_TYPE_HELLO:
       break;
-        
-    default:
-      sendBadCommand();
   }
 }
 
