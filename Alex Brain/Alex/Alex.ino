@@ -99,6 +99,20 @@ void sendStatus()
   // packetType and command files accordingly, then use sendResponse
   // to send out the packet. See sendMessage on how to use sendResponse.
   //
+  TPacket statusPacket;
+  statusPacket.packetType = PACKET_TYPE_RESPONSE;
+  statusPacket.command = RESP_STATUS;
+  statusPacket.params[0] = leftForwardTicks;
+  statusPacket.params[1] = rightForwardTicks;
+  statusPacket.params[2] = leftReverseTicks;
+  statusPacket.params[3] = rightReverseTicks;
+  statusPacket.params[4] = leftForwardTicksTurns;
+  statusPacket.params[5] = rightForwardTicksTurns;
+  statusPacket.params[6] = leftReverseTicksTurns;
+  statusPacket.params[7] = rightReverseTicksTurns;
+  statusPacket.params[8] = forwardDist;
+  statusPacket.params[9] = reverseDist;
+  sendResponse(&statusPacket);
 }
 
 void sendMessage(const char *message)
@@ -267,8 +281,8 @@ void rightISR()
 
   }
 
-  Serial.print("RIGHT: ");
-  Serial.println(rightForwardTicks);
+  dbprint("RIGHT: ");
+  dbprint("%d \n",rightForwardTicks);
 }
 
 // Set up the external interrupt pins INT0 and INT1
@@ -401,14 +415,19 @@ void forward(float dist, float speed)
   // LF = Left forward pin, LR = Left reverse pin
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
+  while (forwardDist <= dist)
+  {
+    analogWrite(LF, val);
+    analogWrite(RF, val);
+    analogWrite(LR,0);
+    analogWrite(RR, 0);
+  }
+  stop();
   
-  analogWrite(LF, val);
-  analogWrite(RF, val);
-  analogWrite(LR,0);
-  analogWrite(RR, 0);
 }
 
-// Reverse Alex "dist" cm at speed "speed".
+// Reverse Alex "dist" cm at speed "speed".f
+
 // "speed" is expressed as a percentage. E.g. 50 is
 // reverse at half speed.
 // Specifying a distance of 0 means Alex will
@@ -568,6 +587,14 @@ void handleCommand(TPacket *command)
         sendOK();
         stop();
       break;
+
+    case COMMAND_GET_STATS:
+        sendStatus();
+      break;
+
+    case COMMAND_CLEAR_STATS:
+        clearCounters();
+      break;
         
     default:
       sendBadCommand();
@@ -656,7 +683,7 @@ void loop() {
 
 // Uncomment the code below for Week 9 Studio 2
 
-/*
+
  // put your main code here, to run repeatedly:
   TPacket recvPacket; // This holds commands from the Pi
 
@@ -675,5 +702,5 @@ void loop() {
         sendBadChecksum();
       } 
       
-      */
+      
 }
