@@ -65,6 +65,10 @@ volatile unsigned long rightRevs;
 volatile float forwardDist;
 volatile float reverseDist;
 
+//variables to keep track of whether we have moved a commanded distance
+unsigned long deltaDist;
+unsigned long newDist;
+
 
 /*
  * 
@@ -281,8 +285,8 @@ void rightISR()
 
   }
 
-  dbprint("RIGHT: ");
-  dbprint("%d \n",rightForwardTicks);
+  //dbprint("RIGHT: ");
+  //dbprint("%d \n",rightForwardTicks);
 }
 
 // Set up the external interrupt pins INT0 and INT1
@@ -405,6 +409,13 @@ int pwmVal(float speed)
 // continue moving forward indefinitely.
 void forward(float dist, float speed)
 {
+
+  if (dist > 0)
+    deltaDist = dist;
+  else
+    deltaDist = 9999999;
+
+  newDist = forwardDist + deltaDist;
   dir = FORWARD;
   int val = pwmVal(speed);
 
@@ -415,14 +426,12 @@ void forward(float dist, float speed)
   // LF = Left forward pin, LR = Left reverse pin
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
-  while (forwardDist <= dist)
-  {
-    analogWrite(LF, val);
-    analogWrite(RF, val);
-    analogWrite(LR,0);
-    analogWrite(RR, 0);
-  }
-  stop();
+
+  analogWrite(LF, val);
+  analogWrite(RF, val);
+  analogWrite(LR,0);
+  analogWrite(RR, 0);
+
   
 }
 
@@ -434,6 +443,12 @@ void forward(float dist, float speed)
 // continue reversing indefinitely.
 void reverse(float dist, float speed)
 {
+  if (dist > 0)
+    deltaDist = dist;
+  else
+    deltaDist = 9999999;
+
+  newDist = forwardDist + deltaDist;
   dir = BACKWARD;
   int val = pwmVal(speed);
 
@@ -701,6 +716,35 @@ void loop() {
       {
         sendBadChecksum();
       } 
-      
+
+  if(deltaDist > 0)
+  {
+    if (dir == FORWARD)
+    {
+      if(forwardDist > newDist)
+      {
+        deltaDist = 0;
+        newDist = 0;
+        stop();
+      }
+    }
+    else if (dir == BACKWARD)
+    {
+      if(reverseDist >= newDist)
+      {
+        deltaDist = 0;
+        newDist = 0;
+        stop();
+      }
+    }
+    else if(dir = STOP)
+    {
+       deltaDist = 0;
+       newDist = 0;
+       stop();
+    }
+  }
+   
+  
       
 }
