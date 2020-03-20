@@ -428,7 +428,7 @@ void forward(float dist, float speed)
   // This will be replaced later with bare-metal code.
 
   analogWrite(LF, val);
-  analogWrite(RF, val);
+  analogWrite(RF, val/1.4);
   analogWrite(LR,0);
   analogWrite(RR, 0);
 
