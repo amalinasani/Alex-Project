@@ -6,11 +6,9 @@
 #include "packet.h"
 #include "constants.h"
 
-// PI, for calculating turn circumference
-#define PI 3.141592654
 
 // Alex's length and breadth in cm
-#define ALEX_LENGTH 17
+#define ALEX_LENGTH 6.5
 #define ALEX_BREADTH 13 
 
 // Alex's diagonal
@@ -291,11 +289,11 @@ void rightISR()
       break;
 
     case LEFT:
-      rightForwardTicksTurns++;
+      leftReverseTicksTurns++;
       break;
 
     case RIGHT:
-      rightReverseTicksTurns++;
+      leftForwardTicksTurns++;
       break;
 
     default:
@@ -530,7 +528,7 @@ void right(float ang, float speed)
   else 
     deltaTicks = computeDeltaTicks(ang);
 
-  targetTicks = rightReverseTicksTurns + deltaTicks;
+  targetTicks = leftForwardTicksTurns + deltaTicks;
 
   // For now we will ignore ang. We will fix this in Week 9.
   // We will also replace this code with bare-metal later.
@@ -789,7 +787,7 @@ void loop() {
   {
     if (dir == LEFT) 
     {
-      if (leftReverseTicksTurns >= targetTicks)
+      if (leftReverseTicksTurns >= (targetTicks))
       {
         deltaTicks = 0;
         targetTicks = 0;
@@ -798,7 +796,7 @@ void loop() {
     }
     else if (dir == RIGHT) 
     {
-      if (rightReverseTicksTurns >=  targetTicks)
+      if (leftForwardTicksTurns >=  targetTicks)
       {
         deltaTicks = 0;
         targetTicks = 0;
