@@ -1,8 +1,23 @@
 #include <stdarg.h>
+#include <math.h>
+
 #include "serialize.h"
 
 #include "packet.h"
 #include "constants.h"
+
+// PI, for calculating turn circumference
+#define PI 3.141592654
+
+// Alex's length and breadth in cm
+#define ALEX_LENGTH 17
+#define ALEX_BREADTH 13 
+
+// Alex's diagonal
+float alexDiagonal = 0.0;
+
+// Alex's turning circumference
+float alexCirc = 0.0;
 
 typedef enum
 {
@@ -14,7 +29,7 @@ typedef enum
 
 }   TDirection;
 
-volatile TDirection dir = BACKWARD;
+volatile TDirection dir = STOP;
 
 /*
  * Alex's configuration constants
@@ -69,6 +84,9 @@ volatile float reverseDist;
 unsigned long deltaDist;
 unsigned long newDist;
 
+// Variables to keep track of turning angle
+unsigned long deltaTicks;
+unsigned long targetTicks;
 
 /*
  * 
@@ -465,6 +483,13 @@ void reverse(float dist, float speed)
   analogWrite(RF, 0);
 }
 
+unsigned long computeDeltaTicks(float ang) 
+{
+  unsigned long ticks = (unsigned long) ((ang * alexCirc * COUNTS_PER_REV) / (360.0 * WHEEL_CIRC));
+
+  return ticks;
+}
+
 // Turn Alex left "ang" degrees at speed "speed".
 // "speed" is expressed as a percentage. E.g. 50 is
 // turn left at half speed.
@@ -472,13 +497,17 @@ void reverse(float dist, float speed)
 // turn left indefinitely.
 void left(float ang, float speed)
 {
+    
   dir = LEFT;
   int val = pwmVal(speed);
 
-  // For now we will ignore ang. We will fix this in Week 9.
-  // We will also replace this code with bare-metal later.
-  // To turn left we reverse the left wheel and move
-  // the right wheel forward.
+  if (ang == 0)
+    deltaTicks = 99999999;
+  else 
+    deltaTicks = computeDeltaTicks(ang);
+
+  targetTicks = leftReverseTicksTurns + deltaTicks;
+
   analogWrite(LR, val);
   analogWrite(RF, val);
   analogWrite(LF, 0);
@@ -494,6 +523,14 @@ void right(float ang, float speed)
 {
   dir = RIGHT;
   int val = pwmVal(speed);
+
+  if (ang == 0) 
+    deltaTicks = 99999999;
+
+  else 
+    deltaTicks = computeDeltaTicks(ang);
+
+  targetTicks = rightReverseTicksTurns + deltaTicks;
 
   // For now we will ignore ang. We will fix this in Week 9.
   // We will also replace this code with bare-metal later.
@@ -655,6 +692,8 @@ void waitForHello()
 
 void setup() {
   // put your setup code here, to run once:
+  alexDiagonal = sqrt((ALEX_LENGTH * ALEX_LENGTH) + (ALEX_BREADTH * ALEX_BREADTH));
+  alexCirc = PI * alexDiagonal;
 
   cli();
   setupEINT();
@@ -721,7 +760,7 @@ void loop() {
   {
     if (dir == FORWARD)
     {
-      if(forwardDist > newDist)
+      if(forwardDist >= newDist)
       {
         deltaDist = 0;
         newDist = 0;
@@ -737,14 +776,40 @@ void loop() {
         stop();
       }
     }
-    else if(dir = STOP)
+
+    else if(dir == STOP)
     {
        deltaDist = 0;
        newDist = 0;
        stop();
     }
   }
-   
-  
-      
+
+  if (deltaTicks > 0) 
+  {
+    if (dir == LEFT) 
+    {
+      if (leftReverseTicksTurns >= targetTicks)
+      {
+        deltaTicks = 0;
+        targetTicks = 0;
+        stop();
+      }
+    }
+    else if (dir == RIGHT) 
+    {
+      if (rightReverseTicksTurns >=  targetTicks)
+      {
+        deltaTicks = 0;
+        targetTicks = 0;
+        stop();
+      }
+    }
+    else if (dir == STOP)
+    {
+      deltaTicks = 0;
+      targetTicks = 0;
+      stop();
+    }
+  }    
 }
