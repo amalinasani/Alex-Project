@@ -1,5 +1,5 @@
-TLS/*.crt
-TLS/*.key
-TLS/*.csr
-TLS/*.pem
+TLS/**/*.crt
+TLS/**/*.key
+TLS/**/*.csr
+TLS/**/*.pem
 
