@@ -2,4 +2,7 @@ TLS/**/*.crt
 TLS/**/*.key
 TLS/**/*.csr
 TLS/**/*.pem
-
+TLS/client/test_tls_client
+TLS/client/tls-alex-client
+TLS/server/test_tls_server
+TLS/server/tls-alex-server
