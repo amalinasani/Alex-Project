@@ -5,12 +5,14 @@
 #include "packet.h"
 #include "serial.h"
 #include "serialize.h"
+#include <iostream>
+using namespace std;
 
 /* (DONE) TODO: Set PORT_NAME to the port name of your Arduino */
 #define PORT_NAME			"/dev/ttyACM0"
 /* END TODO */
 
-#define BAUD_RATE			B57600
+#define BAUD_RATE			B9600
 
 // TLS Port Number
 #define SERVER_PORT			5000
@@ -99,6 +101,7 @@ void handleResponse(TPacket *packet)
 
 void handleUARTPacket(TPacket *packet)
 {
+	printf("response received");
 	switch(packet->packetType)
 	{
 		case PACKET_TYPE_COMMAND:
@@ -123,7 +126,9 @@ void handleUARTPacket(TPacket *packet)
 void uartSendPacket(TPacket *packet)
 {
 	char buffer[PACKET_SIZE];
+
 	int len = serialize(buffer, packet, sizeof(TPacket));
+
 
 	serialWrite(buffer, len);
 }

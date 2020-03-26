@@ -1,7 +1,7 @@
 #include <stdarg.h>
 #include <math.h>
 
-#include "serialize.h"
+#include <serialize.h>
 
 #include "packet.h"
 #include "constants.h"
@@ -464,7 +464,7 @@ void reverse(float dist, float speed)
   else
     deltaDist = 9999999;
 
-  newDist = forwardDist + deltaDist;
+  newDist = reverseDist + deltaDist;
   dir = BACKWARD;
   int val = pwmVal(speed);
 
@@ -610,8 +610,10 @@ void initializeState()
 
 void handleCommand(TPacket *command)
 {
+
   switch(command->command)
   {
+    
     // For movement commands, param[0] = distance, param[1] = speed.
     case COMMAND_FORWARD:
         sendOK();
