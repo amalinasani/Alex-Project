@@ -14,6 +14,7 @@
 
 int exitFlag=0;
 sem_t _xmitSema;
+static volatile int ready_flag = 1;
 
 void handleError(TResult error)
 {
@@ -54,7 +55,11 @@ void handleResponse(TPacket *packet)
 	switch(packet->command)
 	{
 		case RESP_OK:
+            //code will be inserted here to mention that message received
+            //and the machine is ready to received and is ready to send
+            //out another command
 			printf("Command OK\n");
+            ready_flag = 1;
 		break;
 
 		case RESP_STATUS:
@@ -272,12 +277,19 @@ int main()
 	{
 		char ch;
 		printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
-		ch = getch();
-
+		// do not accept any further user input until ready
+        
+        
+        ch = getch();
+       
+        
 		// Purge extraneous characters from input stream
 		//flushInput();
-
-		sendCommand(ch);
+        if (ready_flag)
+        {
+		    sendCommand(ch);
+            ready_flag = 0;
+        }
 	}
 	endwin();
 	printf("Closing connection to Arduino.\n");
