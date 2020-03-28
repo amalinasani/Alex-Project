@@ -21,7 +21,12 @@ void handleError(TResult error)
 	switch(error)
 	{
 		case PACKET_BAD:
+			nocbreak();
 			printf("ERROR: Bad Magic Number\n");
+			printf("Press Enter to acknowledge\n");
+			char temp;
+			temp = getchar();
+			halfdelay(3);
 			break;
 
 		case PACKET_CHECKSUM_BAD:
@@ -272,23 +277,74 @@ int main()
 
 	helloPacket.packetType = PACKET_TYPE_HELLO;
 	sendPacket(&helloPacket);
-
+	halfdelay(3);
+	char ch = 's';
+	char stop_flag = 0;
 	while(!exitFlag)
 	{
-		char ch;
-		printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
+		
+		//printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
 		// do not accept any further user input until ready
         
         
         ch = getch();
-       
+        //printf("%c\n", ch);
+
         
 		// Purge extraneous characters from input stream
 		//flushInput();
+		
+		//ready flag checks if the arduino is ready to receieve command
+		//stop flag check to see if arduino is already stopped and thus no need to 
+		//send another stop signal
         if (ready_flag)
         {
-		    sendCommand(ch);
-            ready_flag = 0;
+			switch(ch)
+			{
+				case 'q':
+				case 'Q':
+					sendCommand('q');
+					ready_flag = 0;
+					stop_flag = 0;
+				case 'w':
+				case 'W':
+					sendCommand('f');
+					ready_flag = 0; 
+					stop_flag = 0;
+					break;
+				case 'a':
+				case 'A':
+					sendCommand('l');
+					ready_flag = 0;
+					stop_flag = 0;
+					break;
+				case 's':
+				case 'S':
+					sendCommand('b');
+					ready_flag = 0;
+					stop_flag = 0;
+					break;
+				case 'd':
+				case 'D':
+					sendCommand('r');
+					ready_flag = 0;
+					stop_flag = 0;
+					break;
+				case 'b':
+				case 'B'://emergency break
+					sendCommand('s');
+					ready_flag = 0;
+					stop_flag = 0;
+					break;
+				default:
+					if (stop_flag == 0) //only stop when it needs to
+					{
+						sendCommand('s');
+						ready_flag = 0;
+						stop_flag = 1;
+					}
+					break;
+			}
         }
 	}
 	endwin();
