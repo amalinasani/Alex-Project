@@ -8,15 +8,19 @@
 // Packet types, error codes, etc.
 #include "constants.h"
 
+// include for repeated input
+#include <ncurses.h>
+
 // Tells us that the network is running.
 static volatile int networkActive=0;
-
+static volatile int ready_flag = 1;
 void handleError(const char *buffer)
 {
 	switch(buffer[1])
 	{
 		case RESP_OK:
 			printf("Command / Status OK\n");
+			ready_flag = 1; //avoid commands sent when system not ready
 			break;
 
 		case RESP_BAD_PACKET:
@@ -161,53 +165,82 @@ void getParams(int32_t *params)
 void *writerThread(void *conn)
 {
 	int quit=0;
-
+	int stop_flag = 0;
 	while(!quit)
 	{
 		char ch;
+		ch = getch();
 		printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
-		scanf("%c", &ch);
+		//scanf("%c", &ch);
 
 		// Purge extraneous characters from input stream
-		flushInput();
+		//flushInput();
 
 		char buffer[10];
 		int32_t params[2];
 
 		buffer[0] = NET_COMMAND_PACKET;
-		switch(ch)
+		if(ready_flag)
 		{
-			case 'f':
-			case 'F':
-			case 'b':
-			case 'B':
-			case 'l':
-			case 'L':
-			case 'r':
-			case 'R':
-						getParams(params);
-						buffer[1] = ch;
-						memcpy(&buffer[2], params, sizeof(params));
-						sendData(conn, buffer, sizeof(buffer));
-						break;
-			case 's':
-			case 'S':
-			case 'c':
-			case 'C':
-			case 'g':
-			case 'G':
-					params[0]=0;
-					params[1]=0;
+			switch(ch)
+			{
+				case 'w':
+				case 'W':
+					buffer[1] = 'f';
+					params[0] = 1;
+					params[1] = 100;
 					memcpy(&buffer[2], params, sizeof(params));
-					buffer[1] = ch;
 					sendData(conn, buffer, sizeof(buffer));
+					ready_flag = 0;
 					break;
-			case 'q':
-			case 'Q':
-				quit=1;
-				break;
-			default:
-				printf("BAD COMMAND\n");
+				case 's':
+				case 'S':
+					buffer[1] = 'b';
+					params[0] = 1;
+					params[1] = 100;
+					memcpy(&buffer[2], params, sizeof(params));
+					sendData(conn, buffer, sizeof(buffer));
+					ready_flag = 0;
+					break;	
+				case 'a':
+				case 'A':
+					buffer[1] = 'l';
+					params[0] = 10;
+					params[1] = 100;
+					memcpy(&buffer[2], params, sizeof(params));
+					sendData(conn, buffer, sizeof(buffer));
+					ready_flag = 0;
+					break;
+				case 'd':
+				case 'D':
+							//getParams(params);
+					params[0] = 10;
+					params[1] = 100;
+					buffer[1] = 'r';
+					memcpy(&buffer[2], params, sizeof(params));
+					sendData(conn, buffer, sizeof(buffer));
+					ready_flag = 0;
+					break;
+				case 'B':
+				case 'b':
+				case 'c':
+				case 'C':
+				case 'g':
+				case 'G':
+						params[0]=0;
+						params[1]=0;
+						memcpy(&buffer[2], params, sizeof(params));
+						buffer[1] = ch;
+						sendData(conn, buffer, sizeof(buffer));
+						ready_flag = 0;
+						break;
+				case 'q':
+				case 'Q':
+					quit=1;
+					break;
+				default:
+					printf("BAD COMMAND\n");
+			}
 		}
 	}
 
@@ -242,6 +275,10 @@ void connectToServer(const char *serverName, int portNum)
 
 int main(int ac, char **av)
 {
+	initscr();
+	cbreak();
+	noecho();
+	halfdelay(3);
 	if(ac != 3)
 	{
 		fprintf(stderr, "\n\n%s <IP address> <Port Number>\n\n", av[0]);
@@ -258,4 +295,5 @@ int main(int ac, char **av)
 
     /* END TODO */
 	printf("\nMAIN exiting\n\n");
+	endwin();
 }
