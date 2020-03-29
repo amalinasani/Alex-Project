@@ -87,6 +87,7 @@ void handleResponse(TPacket *packet)
 			resp[0] = NET_ERROR_PACKET;
 			resp[1] = RESP_OK;
 			sendNetworkData(resp, sizeof(resp));
+			ready_flag = 1;
 		break;
 
 		case RESP_STATUS:
