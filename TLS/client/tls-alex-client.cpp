@@ -165,7 +165,7 @@ void getParams(int32_t *params)
 void *writerThread(void *conn)
 {
 	int quit=0;
-	int stop_flag = 0;
+	int stop_flag = 0; //indicate when machine has stopped
 	while(!quit)
 	{
 		char ch;
@@ -175,7 +175,7 @@ void *writerThread(void *conn)
 
 		// Purge extraneous characters from input stream
 		//flushInput();
-
+		
 		char buffer[10];
 		int32_t params[2];
 
@@ -187,42 +187,44 @@ void *writerThread(void *conn)
 				case 'w':
 				case 'W':
 					buffer[1] = 'f';
-					params[0] = 1;
+					params[0] = 5;
 					params[1] = 100;
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
 					ready_flag = 0;
+					stop_flag = 0;
 					break;
 				case 's':
 				case 'S':
 					buffer[1] = 'b';
-					params[0] = 1;
+					params[0] = 5;
 					params[1] = 100;
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
 					ready_flag = 0;
+					stop_flag = 0;
 					break;	
 				case 'a':
 				case 'A':
 					buffer[1] = 'l';
-					params[0] = 10;
+					params[0] = 20;
 					params[1] = 100;
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
 					ready_flag = 0;
+					stop_flag = 0;
 					break;
 				case 'd':
 				case 'D':
 							//getParams(params);
-					params[0] = 10;
+					params[0] = 20;
 					params[1] = 100;
 					buffer[1] = 'r';
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
 					ready_flag = 0;
+					stop_flag = 0;
 					break;
-				case 'B':
-				case 'b':
 				case 'c':
 				case 'C':
 				case 'g':
@@ -238,8 +240,21 @@ void *writerThread(void *conn)
 				case 'Q':
 					quit=1;
 					break;
+				case 'b':
+				case 'B':
 				default:
-					printf("BAD COMMAND\n");
+					if (stop_flag == 0) 
+					{
+						params[0] = 0;
+						params[1] = 0;
+						memcpy(&buffer[2], params, sizeof(params));
+						buffer[1] = 's';
+						sendData(conn, buffer, sizeof(buffer));
+						ready_flag = 0;
+						stop_flag = 1;
+						printf("BAD COMMAND\n");
+					}
+					break;
 			}
 		}
 	}
