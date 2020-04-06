@@ -333,6 +333,75 @@ ISR (INT1_vect)
 
 // Implement INT0 and INT1 ISRs above.
 
+/*For this section, we will need to set it in such a way that only one of these will trigger at a time
+ * in other words, if compA has a ocroa value of 128, comp b should have zero to produce constant low
+ * 
+ */
+ISR(TIMER0_COMPA_vect) //turn on the left motor forward pin6
+{
+    if(OCR0A == 0) //permanently set it to low when OCR0A is 0
+    {
+      PORTD &=0b10111111;
+    }
+    else if (OCR0A == 255)
+    {
+      PORTD |=0b01000000;
+    }
+    else
+    {
+      PORTD ^= 0b01000000; //toggle pin6
+    }
+
+}
+
+ISR(TIMER0_COMPB_vect) //turn on left motor backward pin5
+{
+    if(OCR0B == 0)
+    {
+      PORTD &=0b11011111;
+    }
+    else if (OCR0B == 255)
+    {
+      PORTD |=0b00100000;
+    }
+    else
+    {
+      PORTD ^= 0b00100000;
+    }
+    //PORTD ^= 0b00100000; //toggle pin5
+}
+ISR(TIMER2_COMPA_vect) //turn on the right motor forward pin10
+{
+    if(OCR2A == 0)
+    {
+      PORTB &=0b11111011;
+    }
+    else if (OCR2A == 255)
+    {
+      PORTB |=0b00000100;
+    }
+    else
+    {
+      PORTB ^= 0b00000100;
+    }
+    //PORTB ^= 0b00000100;
+}
+ISR(TIMER2_COMPB_vect) //turn on the right motor backward pin11
+{
+    if(OCR2B == 0)
+    {
+      PORTB &=0b11110111;
+    }
+    else if (OCR2B == 255)
+    {
+      PORTB |=0b00001000;
+    }
+    else
+    {
+      PORTB ^= 0b00001000;
+    }
+    //PORTB ^= 0b00001000;
+}
 /*
  * Setup and start codes for serial communications
  * 
@@ -396,6 +465,20 @@ void setupMotors()
    *    B1IN - Pin 10, PB2, OC1B
    *    B2In - pIN 11, PB3, OC2A
    */
+
+
+
+  
+  //setting up of timers
+  TCNT0 = 0; //initial counter
+  TCNT2 = 0; //initial counter
+  TCCR0A = 0b00000001; //we shall set the PWM pins at pd6 and pd7 to be under normal operation for now, Phase correct PWM
+  TCCR0B = 0b00000011; // set clock prescalar to 256
+  TCCR2A = 0b00000001; //phase correct pwm
+  TCCR2B = 0b00000110; //set clock prescalar to 256
+  TIMSK0 |= 110;
+  TIMSK2 |= 110;
+
 }
 
 // Start the PWM for Alex's motors.
@@ -403,7 +486,18 @@ void setupMotors()
 // blank.
 void startMotors()
 {
-  
+  OCR0A = 0; //set the duty cycle to 50% left forward
+  OCR0B = 0; //set the duty cycle to 50% left reverse
+  OCR2A = 0; //set the duty cycle to 50% right forward
+  OCR2B = 0; //set the duty cycle to 50% right reverse
+
+  //pin setup, set these pins to output for pin 5, 6, 10, 11
+  DDRD |= 0b01100000;
+  DDRB |= 0b00001100;
+
+  //port setup. Start all with a value of zero first
+  PORTB &= 0b111110011;  
+  PORTD &= 0b100111111;
 }
 
 // Convert percentages to PWM values
@@ -443,11 +537,17 @@ void forward(float dist, float speed)
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
 
+  OCR0A = val;
+  OCR0B = 0;
+  OCR2A = val;
+  OCR2B = 0;
+
+  /*
   analogWrite(LF, val);
   analogWrite(RF, val);
   analogWrite(LR,0);
   analogWrite(RR, 0);
-
+*/
   
 }
 
@@ -475,10 +575,17 @@ void reverse(float dist, float speed)
   // LF = Left forward pin, LR = Left reverse pin
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
+
+  OCR0A = 0;
+  OCR0B = val;
+  OCR2A = 0;
+  OCR2B = val;
+  /*
   analogWrite(LR, val);
   analogWrite(RR, val);
   analogWrite(LF, 0);
   analogWrite(RF, 0);
+  */
 }
 
 unsigned long computeDeltaTicks(float ang) 
@@ -506,10 +613,16 @@ void left(float ang, float speed)
 
   targetTicks = leftReverseTicksTurns + deltaTicks;
 
+  
+  OCR0A = 0;
+  OCR0B = val;
+  OCR2A = val;
+  OCR2B = 0;
+/*
   analogWrite(LR, val);
   analogWrite(RF, val);
   analogWrite(LF, 0);
-  analogWrite(RR, 0);
+  analogWrite(RR, 0);*/
 }
 
 // Turn Alex right "ang" degrees at speed "speed".
@@ -534,20 +647,36 @@ void right(float ang, float speed)
   // We will also replace this code with bare-metal later.
   // To turn right we reverse the right wheel and move
   // the left wheel forward.
+
+ 
+  OCR0A = val;
+  OCR0B = 0;
+  OCR2A = 0;
+  OCR2B = val;
+  /*
   analogWrite(RR, val);
   analogWrite(LF, val);
   analogWrite(LR, 0);
   analogWrite(RF, 0);
+  */
 }
 
 // Stop Alex. To replace with bare-metal code later.
 void stop()
 {
   dir = STOP;
+
+  
+  OCR0A = 0;
+  OCR0B = 0;
+  OCR2A = 0;
+  OCR2B = 0;
+  /*
   analogWrite(LF, 0);
   analogWrite(LR, 0);
   analogWrite(RF, 0);
   analogWrite(RR, 0);
+  */
 }
 
 /*
@@ -703,6 +832,8 @@ void setup() {
   startMotors();
   enablePullups();
   initializeState();
+
+
   sei();
 }
 
