@@ -32,3 +32,16 @@ Then, execute
 $ g++ tls-alex-client.cpp make_tls_client.cpp tls_client_lib.cpp tls_pthread.cpp tls_common_lib.cpp -pthread -lssl -lcrypto -o tls-alex-client
 $ ./tls-alex-client
 ```
+
+### Power Reduction
+For Raspberry Pi (__should be run each time Pi is restarted__):
+- Disable HDMI
+```sh 
+$ /usr/bin/tvservice -o
+```
+- Disable Ethernet
+```sh 
+$ sudo ~/hub-ctrl -h 0 -P 1 -p 0
+```
+
+We can autorun the commands by putting them in /etc/rc.local, but it's not recommended to disable HDMI in that way. Otherwise, if VNC/SSH failed, we won't be able to connect the Pi to an external display to debug.
