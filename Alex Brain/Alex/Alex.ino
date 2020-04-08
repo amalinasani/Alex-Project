@@ -97,8 +97,54 @@ unsigned long newDist;
 unsigned long deltaTicks;
 unsigned long targetTicks;
 
+/*
+ * USART bare metal
+ */
 
-// Power reduction
+#define BUFFER_SIZE 640 // 128 * 5
+volatile unsigned long current_size = 0;
+volatile unsigned long front = 0;
+volatile unsigned long back = 0;
+char gb_buffer[BUFFER_SIZE]; // circular buffer for storing 
+
+typedef enum {
+  BUFFER_OK = 0,
+  BUFFER_EMPTY = 1,
+  BUFFER_FULL = 2
+} BufferStatus;
+
+// write to global buffer
+BufferStatus writeBuffer(char data) {
+  if (current_size >= BUFFER_SIZE) {
+    return BUFFER_FULL;
+  }
+  // insert data to the back of global buffer
+  gb_buffer[back] = data;
+  
+  // update back
+  back = (back + 1) % BUFFER_SIZE;
+  // update buffer capacity
+  current_size += 1;
+  return BUFFER_OK;
+}
+
+BufferStatus readBuffer(char* data) {
+  if (current_size == 0) {
+    return BUFFER_EMPTY;
+  }
+
+  // read the data into the pointer
+  *data = gb_buffer[front];
+  // update front pointer
+  front = (front + 1) % BUFFER_SIZE;
+  current_size -= 1;
+  return BUFFER_OK;
+}
+
+/*
+* Power reduction 
+*/
+ 
 void WDT_off(void)
 {
   /* Global interrupt should be turned OFF here if not
@@ -472,13 +518,21 @@ ISR(TIMER2_COMPB_vect) //turn on the right motor backward pin11
  * Setup and start codes for serial communications
  * 
  */
+
+
+ 
 // Set up the serial connection. For now we are using 
 // Arduino Wiring, you will replace this later
 // with bare-metal code.
 void setupSerial()
 {
   // To replace later with bare-metal.
-  Serial.begin(9600);
+//  Serial.begin(9600);
+
+  UBRR0L = 103;
+  UBRR0H = 0;
+  UCSR0C = 0b00000110;
+  UCSR0A = 0;
 }
 
 // Start the serial connection. For now we are using
@@ -489,31 +543,87 @@ void startSerial()
 {
   // Empty for now. To be replaced with bare-metal code
   // later on.
-  
+  UCSR0B = 0b10111000;
 }
 
 // Read the serial port. Returns the read character in
 // ch if available. Also returns TRUE if ch is valid. 
 // This will be replaced later with bare-metal code.
 
-int readSerial(char *buffer)
+// when data is received
+ISR(USART_RX_vect)
+{
+  // store received data to data
+  unsigned char data = UDR0;
+  // write to global buffer for later use
+  writeBuffer(data);
+}
+
+// sending data in progress
+ISR(USART_UDRE_vect) {
+  unsigned char data;
+  // read byte from global buffer into data variable
+  BufferStatus stat = readBuffer(&data);
+
+  if (stat == BUFFER_OK) {
+    UDR0 = data; // send the data by setting register
+  } else {
+    if (stat == BUFFER_EMPTY) {
+      UCSR0B &= 0B11011111;
+    }
+  }
+}
+
+int readSerial(unsigned char *buffer)
 {
 
   int count=0;
 
-  while(Serial.available())
-    buffer[count++] = Serial.read();
-
+  BufferStatus stat;
+  do {
+    // read byte by byte into buffer
+    stat = readBuffer(buffer[count]);
+    if (stat == BUFFER_OK) {
+      count++;
+    }
+  } while (stat == BUFFER_OK);
+  
   return count;
 }
+
 
 // Write to the serial port. Replaced later with
 // bare-metal code
 
 void writeSerial(const char *buffer, int len)
 {
-  Serial.write(buffer, len);
+  BufferStatus stat = BUFFER_OK;
+
+  int i;
+  for (i = 1; i < len && stat == BUFFER_OK; i++) {
+    stat = writeBuffer(buffer[i]);
+  }
+
+  UDR0 = buffer[0];
+  // Enable UDRE interrupt
+  UCSR0B |= 0b0010000;
 }
+
+//int readSerial(char *buffer)
+//{
+//
+//  int count=0;
+//
+//  while(Serial.available())
+//    buffer[count++] = Serial.read();
+//
+//  return count;
+//}
+
+//void writeSerial(const char *buffer, int len)
+//{
+//  Serial.write(buffer, len);
+//}
 
 /*
  * Alex's motor drivers.

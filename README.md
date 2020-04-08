@@ -33,6 +33,8 @@ $ g++ tls-alex-client.cpp make_tls_client.cpp tls_client_lib.cpp tls_pthread.cpp
 $ ./tls-alex-client
 ```
 
+---
+
 ### Power Reduction
 For Raspberry Pi (__should be run each time Pi is restarted__):
 - Disable HDMI
