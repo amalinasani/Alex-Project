@@ -141,9 +141,9 @@ void *receiveThread(void *p)
 		if(len > 0)
 		{
 			result = deserialize(buffer, len, &packet);
-
 			if(result == PACKET_OK)
 			{
+				printf("Packet OK\n");
 				counter=0;
 				handlePacket(&packet);
 			}

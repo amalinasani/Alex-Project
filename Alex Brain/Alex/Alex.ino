@@ -5,6 +5,7 @@
 
 #include "packet.h"
 #include "constants.h"
+#include "circular.h"
 
 
 // Alex's length and breadth in cm
@@ -26,6 +27,7 @@ typedef enum
   RIGHT = 4,
 
 }   TDirection;
+
 
 volatile TDirection dir = STOP;
 
@@ -91,6 +93,9 @@ unsigned long targetTicks;
  * Alex Communication Routines.
  * 
  */
+
+static circular buffer_tx;
+static circular buffer_rx;
  
 TResult readPacket(TPacket *packet)
 {
@@ -98,7 +103,7 @@ TResult readPacket(TPacket *packet)
     // deserializes it.Returns deserialized
     // data in "packet".
     
-    char buffer[PACKET_SIZE];
+    char buffer[PACKET_SIZE];//store packet info retrieved from serial port
     int len;
 
     len = readSerial(buffer);
@@ -339,68 +344,65 @@ ISR (INT1_vect)
  */
 ISR(TIMER0_COMPA_vect) //turn on the left motor forward pin6
 {
-    if(OCR0A == 0) //permanently set it to low when OCR0A is 0
+    if(OCR0A == 0) //set to low permanently when ocroA is 0
     {
-      PORTD &=0b10111111;
+      PORTD &= 0b10111111;
     }
     else if (OCR0A == 255)
     {
-      PORTD |=0b01000000;
+      PORTD |= 0b01000000;
     }
     else
     {
-      PORTD ^= 0b01000000; //toggle pin6
+      PORTD ^= 0b01000000; //toggle pin 6
     }
-
+    
 }
 
 ISR(TIMER0_COMPB_vect) //turn on left motor backward pin5
 {
-    if(OCR0B == 0)
+    if(OCR0B == 0) //set to low permanently when ocroA is 0
     {
-      PORTD &=0b11011111;
+      PORTD &= 0b11011111;
     }
     else if (OCR0B == 255)
     {
-      PORTD |=0b00100000;
+      PORTD |= 0b00100000;
     }
     else
     {
-      PORTD ^= 0b00100000;
+      PORTD ^= 0b00100000; //toggle pin 6
     }
-    //PORTD ^= 0b00100000; //toggle pin5
 }
 ISR(TIMER2_COMPA_vect) //turn on the right motor forward pin10
 {
-    if(OCR2A == 0)
+    if(OCR2A == 0) //set to low permanently when ocroA is 0
     {
-      PORTB &=0b11111011;
+      PORTB &= 0b11111011;
     }
     else if (OCR2A == 255)
     {
-      PORTB |=0b00000100;
+      PORTB |= 0b00000100;
     }
     else
     {
-      PORTB ^= 0b00000100;
+      PORTB ^= 0b00000100; //toggle pin 6
     }
-    //PORTB ^= 0b00000100;
 }
 ISR(TIMER2_COMPB_vect) //turn on the right motor backward pin11
 {
-    if(OCR2B == 0)
+    if(OCR2B == 0) //set to low permanently when ocroA is 0
     {
-      PORTB &=0b11110111;
+      PORTB &= 0b11110111;
     }
     else if (OCR2B == 255)
     {
-      PORTB |=0b00001000;
+      PORTB |= 0b00001000;
     }
     else
     {
-      PORTB ^= 0b00001000;
+      PORTB ^= 0b00001000; //toggle pin 6
     }
-    //PORTB ^= 0b00001000;
 }
 /*
  * Setup and start codes for serial communications
@@ -409,10 +411,18 @@ ISR(TIMER2_COMPB_vect) //turn on the right motor backward pin11
 // Set up the serial connection. For now we are using 
 // Arduino Wiring, you will replace this later
 // with bare-metal code.
+
+
 void setupSerial()
 {
   // To replace later with bare-metal.
-  Serial.begin(9600);
+//  Serial.begin(9600);
+
+  
+  UBRR0L = 103;
+  UBRR0H = 0;
+  UCSR0C = 0b00000110;
+  UCSR0A = 0;
 }
 
 // Start the serial connection. For now we are using
@@ -423,6 +433,24 @@ void startSerial()
 {
   // Empty for now. To be replaced with bare-metal code
   // later on.
+  UCSR0B = 0b10111000;
+}
+
+
+ISR(USART_RX_vect) //triggers whenever UDR0 is suddenly filled with something
+{
+  unsigned char data = UDR0;
+  int result;
+
+  //now that you have the data, transfer it to the rx buffer
+
+  result = buffer_rx.write_buffer((void*) &data, sizeof(char));
+
+  if (result == 2)
+  {
+    //code will fail over here as there is too much data in the buffer
+  }
+  
   
 }
 
@@ -430,23 +458,58 @@ void startSerial()
 // ch if available. Also returns TRUE if ch is valid. 
 // This will be replaced later with bare-metal code.
 
-int readSerial(char *buffer)
+
+int readSerial(char *buffer) //the bufer here is where the data will be stored after transfer from buffer_rx to buffer
 {
 
   int count=0;
 
-  while(Serial.available())
-    buffer[count++] = Serial.read();
+  int result;
 
-  return count;
+  do
+  {
+    result = buffer_rx.read_buffer((void*) &buffer[count], sizeof(char));
+
+      if(result == 0) //information read successfully
+        count++;
+  } while (result == 0); //read until the result come back that there is no more info stored
+
+      
+  return count; //count is the number of bytes read
 }
 
 // Write to the serial port. Replaced later with
 // bare-metal code
 
-void writeSerial(const char *buffer, int len)
+ISR(USART_UDRE_vect)
 {
-  Serial.write(buffer, len);
+  unsigned char data;
+
+  int result;
+
+  result = buffer_tx.read_buffer((void*)&data, sizeof(char));
+
+  if(result == 0)
+    UDR0 = data;
+  else
+    //if(result == 1)
+      UCSR0B &=0b11011111;
+}
+
+void writeSerial(const char *buffer, int len) //buffer is where the data source is at, len is how many bytes to transmit
+{
+  int result = 0;
+
+  int i;
+
+  for(i = 1; i < len && result == 0; i++) //written one byte at a time
+  {
+    result = buffer_tx.write_buffer((void*)&buffer[i], sizeof(char));
+  }
+
+  UDR0 = buffer[0];
+
+  UCSR0B |= 0b00100000;
 }
 
 /*
@@ -466,8 +529,7 @@ void setupMotors()
    *    B2In - pIN 11, PB3, OC2A
    */
 
-
-
+  
   
   //setting up of timers
   TCNT0 = 0; //initial counter
@@ -486,18 +548,18 @@ void setupMotors()
 // blank.
 void startMotors()
 {
-  OCR0A = 0; //set the duty cycle to 50% left forward
-  OCR0B = 0; //set the duty cycle to 50% left reverse
-  OCR2A = 0; //set the duty cycle to 50% right forward
-  OCR2B = 0; //set the duty cycle to 50% right reverse
+  OCR0A = 0; //set the duty cycle left forward
+  OCR0B = 0; //set the duty cycle left reverse
+  OCR2A = 0; //set the duty cycle right forward
+  OCR2B = 0; //set the duty cycle right reverse
 
   //pin setup, set these pins to output for pin 5, 6, 10, 11
   DDRD |= 0b01100000;
   DDRB |= 0b00001100;
 
   //port setup. Start all with a value of zero first
-  PORTB &= 0b111110011;  
-  PORTD &= 0b100111111;
+  PORTB &= 0b11110011;
+  PORTD &= 0b10011111;
 }
 
 // Convert percentages to PWM values
@@ -864,26 +926,32 @@ void loop() {
 
 // Uncomment the code below for Step 2 of Activity 3 in Week 8 Studio 2
 
-// forward(0, 100);
+  //forward(1, 100);
 
 // Uncomment the code below for Week 9 Studio 2
 
 
+  //dbprint("Hello world");
  // put your main code here, to run repeatedly:
   TPacket recvPacket; // This holds commands from the Pi
-
+  
   TResult result = readPacket(&recvPacket);
   
   if(result == PACKET_OK)
+  {
+    //forward(2.0, 100);
     handlePacket(&recvPacket);
+  }
   else
     if(result == PACKET_BAD)
     {
+      //reverse(2.0, 100);
       sendBadPacket();
     }
     else
       if(result == PACKET_CHECKSUM_BAD)
       {
+        //reverse(2.0, 100);
         sendBadChecksum();
       } 
 
