@@ -185,6 +185,7 @@ int main(int argc, const char * argv[]) {
     drv->stopMotor();
     // done!
 on_finished:
+    delay(10000);
     RPlidarDriver::DisposeDriver(drv);
     return 0;
 }

@@ -78,7 +78,9 @@ static TResult assemble(char *outputBuffer, const char *inputBuffer, int len)
 		return PACKET_COMPLETE;
 	}
 	else
+	{
 		return PACKET_INCOMPLETE;
+	}
 }
 
 

@@ -1,21 +1,11 @@
 #include <stdarg.h>
 #include <math.h>
-#include <avr/sleep.h>
+
 #include <serialize.h>
 
 #include "packet.h"
 #include "constants.h"
-
-// Power reduction
-#define PRR_TWI_MASK 0b10000000
-#define PRR_SPI_MASK 0b00000100
-#define ADCSRA_ADC_MASK 0b10000000
-#define PRR_ADC_MASK 0b00000001
-#define PRR_TIMER2_MASK 0b01000000
-#define PRR_TIMER0_MASK 0b00100000
-#define PRR_TIMER1_MASK 0b00001000
-#define SMCR_SLEEP_ENABLE_MASK 0b00000001
-#define SMCR_IDLE_MODE_MASK 0b11110001
+#include "circular.h"
 
 
 // Alex's length and breadth in cm
@@ -37,6 +27,7 @@ typedef enum
   RIGHT = 4,
 
 }   TDirection;
+
 
 volatile TDirection dir = STOP;
 
@@ -98,111 +89,13 @@ unsigned long deltaTicks;
 unsigned long targetTicks;
 
 /*
- * USART bare metal
- */
-
-#define BUFFER_SIZE 640 // 128 * 5
-volatile unsigned long current_size = 0;
-volatile unsigned long front = 0;
-volatile unsigned long back = 0;
-char gb_buffer[BUFFER_SIZE]; // circular buffer for storing 
-
-typedef enum {
-  BUFFER_OK = 0,
-  BUFFER_EMPTY = 1,
-  BUFFER_FULL = 2
-} BufferStatus;
-
-// write to global buffer
-BufferStatus writeBuffer(char data) {
-  if (current_size >= BUFFER_SIZE) {
-    return BUFFER_FULL;
-  }
-  // insert data to the back of global buffer
-  gb_buffer[back] = data;
-  
-  // update back
-  back = (back + 1) % BUFFER_SIZE;
-  // update buffer capacity
-  current_size += 1;
-  return BUFFER_OK;
-}
-
-BufferStatus readBuffer(char* data) {
-  if (current_size == 0) {
-    return BUFFER_EMPTY;
-  }
-
-  // read the data into the pointer
-  *data = gb_buffer[front];
-  // update front pointer
-  front = (front + 1) % BUFFER_SIZE;
-  current_size -= 1;
-  return BUFFER_OK;
-}
-
-/*
-* Power reduction 
-*/
- 
-void WDT_off(void)
-{
-  /* Global interrupt should be turned OFF here if not
-  already done so */
-  /* Clear WDRF in MCUSR */
-  MCUSR &= ~(1<<WDRF);
-  /* Write logical one to WDCE and WDE */
-  /* Keep old prescaler setting to prevent unintentional
-  time-out */
-  WDTCSR |= (1<<WDCE) | (1<<WDE);
-  /* Turn off WDT */
-  WDTCSR = 0x00;
-  /* Global interrupt should be turned ON here if
-  subsequent operations after calling this function do
-  not require turning off global interrupt */
-}
-
-void setupPowerSaving()
-{
-  // Turn off the Watchdog Timer
-  WDT_off();
-  // Modify PRR to shut down TWI
-  PRR |= PRR_TWI_MASK;
-  // Modify PRR to shut down SPI
-  PRR |= PRR_SPI_MASK;
-  // Modify ADCSRA to disable ADC,
-  ADCSRA &= ~ADCSRA_ADC_MASK;
-  // then modify PRR to shut down ADC
-  PRR |= PRR_ADC_MASK;
-  // Set the SMCR to choose the IDLE sleep mode
-  SMCR &= SMCR_IDLE_MODE_MASK;
-  // Do not set the Sleep Enable (SE) bit yet
-  // Set Port B Pin 5 as output pin, then write a logic LOW
-  // to it so that the LED tied to Arduino's Pin 13 is OFF.
-  DDRB |= B00100000;
-  PORTB &= B11011111;
-}
-
-void putArduinoToIdle()
-{
-  // Modify PRR to shut down TIMER 0, 1, and 2
-  PRR |= (PRR_TIMER0_MASK | PRR_TIMER1_MASK | PRR_TIMER2_MASK);
-  // Modify SE bit in SMCR to enable (i.e., allow) sleep
-  SMCR |= SMCR_SLEEP_ENABLE_MASK;
-  // The following function puts ATmega328P’s MCU into sleep;
-  // it wakes up from sleep when USART serial data arrives
-  sleep_cpu();
-  // Modify SE bit in SMCR to disable (i.e., disallow) sleep
-  SMCR &= ~SMCR_SLEEP_ENABLE_MASK;
-  // Modify PRR to power up TIMER 0, 1, and 2
-  PRR &= ~(PRR_TIMER0_MASK | PRR_TIMER1_MASK | PRR_TIMER2_MASK);
-}
-
-/*
  * 
  * Alex Communication Routines.
  * 
  */
+
+static circular buffer_tx;
+static circular buffer_rx;
  
 TResult readPacket(TPacket *packet)
 {
@@ -210,7 +103,7 @@ TResult readPacket(TPacket *packet)
     // deserializes it.Returns deserialized
     // data in "packet".
     
-    char buffer[PACKET_SIZE];
+    char buffer[PACKET_SIZE];//store packet info retrieved from serial port
     int len;
 
     len = readSerial(buffer);
@@ -451,84 +344,81 @@ ISR (INT1_vect)
  */
 ISR(TIMER0_COMPA_vect) //turn on the left motor forward pin6
 {
-    if(OCR0A == 0) //permanently set it to low when OCR0A is 0
+    if(OCR0A == 0) //set to low permanently when ocroA is 0
     {
-      PORTD &=0b10111111;
+      PORTD &= 0b10111111;
     }
     else if (OCR0A == 255)
     {
-      PORTD |=0b01000000;
+      PORTD |= 0b01000000;
     }
     else
     {
-      PORTD ^= 0b01000000; //toggle pin6
+      PORTD ^= 0b01000000; //toggle pin 6
     }
-
+    
 }
 
 ISR(TIMER0_COMPB_vect) //turn on left motor backward pin5
 {
-    if(OCR0B == 0)
+    if(OCR0B == 0) //set to low permanently when ocroA is 0
     {
-      PORTD &=0b11011111;
+      PORTD &= 0b11011111;
     }
     else if (OCR0B == 255)
     {
-      PORTD |=0b00100000;
+      PORTD |= 0b00100000;
     }
     else
     {
-      PORTD ^= 0b00100000;
+      PORTD ^= 0b00100000; //toggle pin 6
     }
-    //PORTD ^= 0b00100000; //toggle pin5
 }
 ISR(TIMER2_COMPA_vect) //turn on the right motor forward pin10
 {
-    if(OCR2A == 0)
+    if(OCR2A == 0) //set to low permanently when ocroA is 0
     {
-      PORTB &=0b11111011;
+      PORTB &= 0b11111011;
     }
     else if (OCR2A == 255)
     {
-      PORTB |=0b00000100;
+      PORTB |= 0b00000100;
     }
     else
     {
-      PORTB ^= 0b00000100;
+      PORTB ^= 0b00000100; //toggle pin 6
     }
-    //PORTB ^= 0b00000100;
 }
 ISR(TIMER2_COMPB_vect) //turn on the right motor backward pin11
 {
-    if(OCR2B == 0)
+    if(OCR2B == 0) //set to low permanently when ocroA is 0
     {
-      PORTB &=0b11110111;
+      PORTB &= 0b11110111;
     }
     else if (OCR2B == 255)
     {
-      PORTB |=0b00001000;
+      PORTB |= 0b00001000;
     }
     else
     {
-      PORTB ^= 0b00001000;
+      PORTB ^= 0b00001000; //toggle pin 6
     }
-    //PORTB ^= 0b00001000;
 }
 /*
  * Setup and start codes for serial communications
  * 
  */
-
-
- 
 // Set up the serial connection. For now we are using 
 // Arduino Wiring, you will replace this later
 // with bare-metal code.
+
+
 void setupSerial()
 {
   // To replace later with bare-metal.
 //  Serial.begin(9600);
 
+  
   UBRR0L = 103;
   UBRR0H = 0;
   UCSR0C = 0b00000110;
@@ -546,84 +436,81 @@ void startSerial()
   UCSR0B = 0b10111000;
 }
 
+
+ISR(USART_RX_vect) //triggers whenever UDR0 is suddenly filled with something
+{
+  unsigned char data = UDR0;
+  int result;
+
+  //now that you have the data, transfer it to the rx buffer
+
+  result = buffer_rx.write_buffer((void*) &data, sizeof(char));
+
+  if (result == 2)
+  {
+    //code will fail over here as there is too much data in the buffer
+  }
+  
+  
+}
+
 // Read the serial port. Returns the read character in
 // ch if available. Also returns TRUE if ch is valid. 
 // This will be replaced later with bare-metal code.
 
-// when data is received
-ISR(USART_RX_vect)
-{
-  // store received data to data
-  unsigned char data = UDR0;
-  // write to global buffer for later use
-  writeBuffer(data);
-}
 
-// sending data in progress
-ISR(USART_UDRE_vect) {
-  unsigned char data;
-  // read byte from global buffer into data variable
-  BufferStatus stat = readBuffer(&data);
-
-  if (stat == BUFFER_OK) {
-    UDR0 = data; // send the data by setting register
-  } else {
-    if (stat == BUFFER_EMPTY) {
-      UCSR0B &= 0B11011111;
-    }
-  }
-}
-
-int readSerial(unsigned char *buffer)
+int readSerial(char *buffer) //the bufer here is where the data will be stored after transfer from buffer_rx to buffer
 {
 
   int count=0;
 
-  BufferStatus stat;
-  do {
-    // read byte by byte into buffer
-    stat = readBuffer(buffer[count]);
-    if (stat == BUFFER_OK) {
-      count++;
-    }
-  } while (stat == BUFFER_OK);
-  
-  return count;
-}
+  int result;
 
+  do
+  {
+    result = buffer_rx.read_buffer((void*) &buffer[count], sizeof(char));
+
+      if(result == 0) //information read successfully
+        count++;
+  } while (result == 0); //read until the result come back that there is no more info stored
+
+      
+  return count; //count is the number of bytes read
+}
 
 // Write to the serial port. Replaced later with
 // bare-metal code
 
-void writeSerial(const char *buffer, int len)
+ISR(USART_UDRE_vect)
 {
-  BufferStatus stat = BUFFER_OK;
+  unsigned char data;
+
+  int result;
+
+  result = buffer_tx.read_buffer((void*)&data, sizeof(char));
+
+  if(result == 0)
+    UDR0 = data;
+  else
+    //if(result == 1)
+      UCSR0B &=0b11011111;
+}
+
+void writeSerial(const char *buffer, int len) //buffer is where the data source is at, len is how many bytes to transmit
+{
+  int result = 0;
 
   int i;
-  for (i = 1; i < len && stat == BUFFER_OK; i++) {
-    stat = writeBuffer(buffer[i]);
+
+  for(i = 1; i < len && result == 0; i++) //written one byte at a time
+  {
+    result = buffer_tx.write_buffer((void*)&buffer[i], sizeof(char));
   }
 
   UDR0 = buffer[0];
-  // Enable UDRE interrupt
-  UCSR0B |= 0b0010000;
+
+  UCSR0B |= 0b00100000;
 }
-
-//int readSerial(char *buffer)
-//{
-//
-//  int count=0;
-//
-//  while(Serial.available())
-//    buffer[count++] = Serial.read();
-//
-//  return count;
-//}
-
-//void writeSerial(const char *buffer, int len)
-//{
-//  Serial.write(buffer, len);
-//}
 
 /*
  * Alex's motor drivers.
@@ -642,8 +529,7 @@ void setupMotors()
    *    B2In - pIN 11, PB3, OC2A
    */
 
-
-
+  
   
   //setting up of timers
   TCNT0 = 0; //initial counter
@@ -662,18 +548,18 @@ void setupMotors()
 // blank.
 void startMotors()
 {
-  OCR0A = 0; //set the duty cycle to 50% left forward
-  OCR0B = 0; //set the duty cycle to 50% left reverse
-  OCR2A = 0; //set the duty cycle to 50% right forward
-  OCR2B = 0; //set the duty cycle to 50% right reverse
+  OCR0A = 0; //set the duty cycle left forward
+  OCR0B = 0; //set the duty cycle left reverse
+  OCR2A = 0; //set the duty cycle right forward
+  OCR2B = 0; //set the duty cycle right reverse
 
   //pin setup, set these pins to output for pin 5, 6, 10, 11
   DDRD |= 0b01100000;
   DDRB |= 0b00001100;
 
   //port setup. Start all with a value of zero first
-  PORTB &= 0b111110011;  
-  PORTD &= 0b100111111;
+  PORTB &= 0b11110011;
+  PORTD &= 0b10011111;
 }
 
 // Convert percentages to PWM values
@@ -1001,7 +887,6 @@ void setup() {
   alexCirc = PI * alexDiagonal;
 
   cli();
-  setupPowerSaving();
   setupEINT();
   setupSerial();
   startSerial();
@@ -1041,26 +926,32 @@ void loop() {
 
 // Uncomment the code below for Step 2 of Activity 3 in Week 8 Studio 2
 
-// forward(0, 100);
+  //forward(1, 100);
 
 // Uncomment the code below for Week 9 Studio 2
 
 
+  //dbprint("Hello world");
  // put your main code here, to run repeatedly:
   TPacket recvPacket; // This holds commands from the Pi
-
+  
   TResult result = readPacket(&recvPacket);
   
   if(result == PACKET_OK)
+  {
+    //forward(2.0, 100);
     handlePacket(&recvPacket);
+  }
   else
     if(result == PACKET_BAD)
     {
+      //reverse(2.0, 100);
       sendBadPacket();
     }
     else
       if(result == PACKET_CHECKSUM_BAD)
       {
+        //reverse(2.0, 100);
         sendBadChecksum();
       } 
 
@@ -1090,7 +981,6 @@ void loop() {
        deltaDist = 0;
        newDist = 0;
        stop();
-       putArduinoToIdle();
     }
   }
 
@@ -1119,7 +1009,7 @@ void loop() {
       deltaTicks = 0;
       targetTicks = 0;
       stop();
-      putArduinoToIdle();
     }
   }    
 }
+
