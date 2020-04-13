@@ -11,6 +11,29 @@
 // include for repeated input
 #include <ncurses.h>
 
+enum state
+{
+	FORWARD = 1,
+	BACKWARD = 2,
+	LEFT = 3,
+	RIGHT = 4,
+	STOP = 5,
+}; 
+
+
+//limits
+const int velocity_high = 100;
+const int velocity_low = 35;
+const int angle_high = 45;
+const int angle_low = 0;
+const int step_high = 15;
+const int step_low = 0;
+
+//settings for the machine
+static volatile int velocity = 50;
+static volatile int angle = 20;
+static volatile int step = 5;
+
 // Tells us that the network is running.
 static volatile int networkActive=0;
 static volatile int ready_flag = 1;
@@ -19,7 +42,7 @@ void handleError(const char *buffer)
 	switch(buffer[1])
 	{
 		case RESP_OK:
-			printf("Command / Status OK\n");
+			//wprintw(log, "Command / Status OK\n");
 			ready_flag = 1; //avoid commands sent when system not ready
 			break;
 
@@ -103,7 +126,7 @@ void handleNetwork(const char *buffer, int len)
 void sendData(void *conn, const char *buffer, int len)
 {
 	int c;
-	printf("\nSENDING %d BYTES DATA\n\n", len);
+	//wprintw(log, "\nSENDING %d BYTES DATA\n\n", len);
 	if(networkActive)
 	{
 		/* (DONE) TODO: Insert SSL write here to write buffer to network */
@@ -129,7 +152,7 @@ void *readerThread(void *conn)
 		/* (DONE) TODO: Insert SSL read here into buffer */
 		len = sslRead(conn, buffer, sizeof(buffer));
 
-        printf("read %d bytes from server.\n", len);
+        //wprintw(log,"read %d bytes from server.\n", len);
 		
 		/* END TODO */
 
@@ -162,15 +185,136 @@ void getParams(int32_t *params)
 	flushInput();
 }
 
+void print_instructions(WINDOW* win)
+{
+	wmove(win, 1, 1);
+	wprintw(win, " Use the WASD keys to control the \n movement of your machine\n");
+	wprintw(win, " Use the arrow keys to change machine\n settings\n");
+	wprintw(win, " A value of inf means the machine will\n continue to move/turn as long as \n the key is held down\n");
+	wprintw(win, " W - step forward\n");
+	wprintw(win, " S - step backward\n");
+	wprintw(win, " A - turn left\n");
+	wprintw(win, " D - turn right\n");
+	wprintw(win, " UP - increase speed\n");
+	wprintw(win, " DOWN - decrease speed\n");
+	wprintw(win, " LEFT - reduce degree\n");
+	wprintw(win, " RIGHT - increase degree\n");
+	wprintw(win, " + - increase step dist\n");
+	wprintw(win, " - - decrease step dist\n");
+	wprintw(win, " Q - Quit program\n");
+	wborder(win, '|', '|', '=', '=', '@', '@', '@', '@');
+	wmove(win, 0,0);
+	wprintw(win, "INSTRUCTIONS");
+
+}
+
+void update_state(WINDOW *win, enum state now)
+{
+	wclear(win);
+
+	wmove(win, 0, 0);
+
+	wmove(win, 1, 1);
+	
+	switch(now)
+	{
+		case FORWARD:
+			wprintw(win, "FORWARD");
+			break;
+		case BACKWARD:
+			wprintw(win, "BACKWARD");
+			break;
+		case LEFT:
+			wprintw(win, "TURN LEFT");
+			break;
+		case RIGHT:
+			wprintw(win, "TURN RIGHT");
+			break;
+		case STOP:
+			wprintw(win, "STOP");
+			break;
+	}
+	wborder(win, '|', '|', '=', '=', '@', '@', '@', '@');
+	wmove(win, 0,0);
+	wprintw(win, "MACHINE STATE");
+}
+
+void update_settings(WINDOW* win)
+{
+	wclear(win);
+
+	
+
+	wmove(win, 1, 1);
+	
+	if (angle == 0)
+	{
+		wprintw(win, "ANGLE: inf deg\n");
+	}
+	else
+	{
+		wprintw(win, "ANGLE: %d deg\n", angle);
+	}
+
+	wprintw(win, " SPEED: %d %% \n", velocity);
+	if (step == 0)
+	{
+		wprintw(win, " STEP: inf cm\n");
+	}
+	else
+	{
+		wprintw(win, " STEP: %dcm\n", step);
+	}
+	wborder(win, '|', '|', '=', '=', '@', '@', '@', '@');
+	wmove(win, 0,0);
+	wprintw(win, "MACHINE SETTING");
+}
+
+
 void *writerThread(void *conn)
 {
+	/*This section contains the variables necessary to create windows*/
+	int h, w;
+	getmaxyx(stdscr, h, w); //gets the size of the current screen
+	int height_ins, width_ins;
+	int height_log, width_log;
+	int height_state, width_state;
+	int height_set, width_set;
+	
+	height_ins = (3*h)/4;
+	width_ins = w/2;
+	height_log = h;
+	width_log = w/2;
+	height_state = 3;
+	width_state = w/2;
+	height_set = 5;
+	width_set = w/2;
+
+
+	WINDOW* ins = newwin(height_ins, width_ins, 0, w/2);
+	WINDOW* log = newwin(height_log, width_log, 0, 0);
+	WINDOW* state = newwin(height_state, width_state, h-3, w/2);
+	WINDOW* set = newwin(height_set, width_set, h-height_set-height_state, w/2);
+	
+	
+	scrollok(log, TRUE);
+	print_instructions(ins);
+	
+
+	enum state current;
+	current = STOP;
+		
+	//keeps track of the current direction that we are facing	
+
+
 	int quit=0;
 	int stop_flag = 0; //indicate when machine has stopped
+	printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
 	while(!quit)
 	{
-		char ch;
+		int ch;
 		ch = getch();
-		printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
+		//printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
 		//scanf("%c", &ch);
 
 		// Purge extraneous characters from input stream
@@ -182,13 +326,36 @@ void *writerThread(void *conn)
 		buffer[0] = NET_COMMAND_PACKET;
 		if(ready_flag)
 		{
+			wrefresh(log);
 			switch(ch)
 			{
+				case KEY_LEFT:
+					angle = (angle == angle_low) ? angle : angle - 5;
+					break;
+				case KEY_RIGHT:
+					angle = (angle > angle_high) ? angle : angle + 5;
+					break;
+				case KEY_UP:
+					velocity = (velocity == velocity_high) ? velocity : velocity + 5;
+					break;
+				case KEY_DOWN:
+					velocity = (velocity < velocity_low) ? velocity : velocity - 5;
+					break;
+				case '-':
+				case '_':
+					step = (step == step_low) ? step : step - 1;
+					break;
+				case '+':
+				case '=':
+					step = (step == step_high) ? step : step + 1;
+					break;
 				case 'w':
 				case 'W':
+					current = FORWARD;
+					wprintw(log, "Forward\n");
 					buffer[1] = 'f';
-					params[0] = 5;
-					params[1] = 100;
+					params[0] = step;
+					params[1] = velocity;
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
 					ready_flag = 0;
@@ -196,9 +363,11 @@ void *writerThread(void *conn)
 					break;
 				case 's':
 				case 'S':
+					current = BACKWARD;
+					wprintw(log, "Backward\n");
 					buffer[1] = 'b';
-					params[0] = 5;
-					params[1] = 100;
+					params[0] = step;
+					params[1] = velocity;
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
 					ready_flag = 0;
@@ -206,9 +375,11 @@ void *writerThread(void *conn)
 					break;	
 				case 'a':
 				case 'A':
+					current = LEFT;
+					wprintw(log,"turn left\n");
 					buffer[1] = 'l';
-					params[0] = 20;
-					params[1] = 100;
+					params[0] = angle;
+					params[1] = velocity;
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
 					ready_flag = 0;
@@ -216,9 +387,10 @@ void *writerThread(void *conn)
 					break;
 				case 'd':
 				case 'D':
-							//getParams(params);
-					params[0] = 20;
-					params[1] = 100;
+					current = RIGHT;
+					wprintw(log, "turn right\n");		//getParams(params);
+					params[0] = angle;
+					params[1] = velocity;
 					buffer[1] = 'r';
 					memcpy(&buffer[2], params, sizeof(params));
 					sendData(conn, buffer, sizeof(buffer));
@@ -240,11 +412,15 @@ void *writerThread(void *conn)
 				case 'Q':
 					quit=1;
 					break;
+				
 				case 'b':
 				case 'B':
 				default:
+					
 					if (stop_flag == 0) 
 					{
+						current = STOP;
+						wprintw(log, "vehicle stopped\n");
 						params[0] = 0;
 						params[1] = 0;
 						memcpy(&buffer[2], params, sizeof(params));
@@ -252,11 +428,17 @@ void *writerThread(void *conn)
 						sendData(conn, buffer, sizeof(buffer));
 						ready_flag = 0;
 						stop_flag = 1;
-						printf("BAD COMMAND\n");
+						//printf("BAD COMMAND\n");
 					}
 					break;
 			}
 		}
+	update_state(state, current);
+	update_settings(set);
+	wrefresh(log);
+	wrefresh(ins);
+	wrefresh(state);
+	wrefresh(set);
 	}
 
 	printf("Exiting keyboard thread\n");
@@ -294,6 +476,7 @@ int main(int ac, char **av)
 	cbreak();
 	noecho();
 	halfdelay(3);
+	keypad(stdscr, TRUE);// enable arrow key detection
 	if(ac != 3)
 	{
 		fprintf(stderr, "\n\n%s <IP address> <Port Number>\n\n", av[0]);
