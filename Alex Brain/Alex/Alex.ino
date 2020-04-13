@@ -601,6 +601,7 @@ void setupMotors()
   
   
   //setting up of timers
+ 
   TCNT0 = 0; //initial counter
   TCNT2 = 0; //initial counter
   TCCR0A = 0b00000001; //we shall set the PWM pins at pd6 and pd7 to be under normal operation for now, Phase correct PWM
@@ -609,6 +610,7 @@ void setupMotors()
   TCCR2B = 0b00000110; //set clock prescalar to 256
   TIMSK0 |= 110;
   TIMSK2 |= 110;
+
 
 }
 
@@ -668,10 +670,14 @@ void forward(float dist, float speed)
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
 
+  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
   OCR0A = val;
   OCR0B = 0;
   OCR2A = val;
   OCR2B = 0;
+  TCNT0 = 0;
+  TCNT2 = 0;
+  GTCCR = 0;
 
   /*
   analogWrite(LF, val);
@@ -706,11 +712,14 @@ void reverse(float dist, float speed)
   // LF = Left forward pin, LR = Left reverse pin
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
-
+  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
   OCR0A = 0;
   OCR0B = val;
   OCR2A = 0;
   OCR2B = val;
+  TCNT0 = 0;
+  TCNT2 = 0;
+  GTCCR = 0;
   /*
   analogWrite(LR, val);
   analogWrite(RR, val);
@@ -744,11 +753,14 @@ void left(float ang, float speed)
 
   targetTicks = leftReverseTicksTurns + deltaTicks;
 
-  
+  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);  
   OCR0A = 0;
   OCR0B = val;
   OCR2A = val;
   OCR2B = 0;
+  TCNT0 = 0;
+  TCNT2 = 0;
+  GTCCR = 0;
 /*
   analogWrite(LR, val);
   analogWrite(RF, val);
@@ -779,11 +791,14 @@ void right(float ang, float speed)
   // To turn right we reverse the right wheel and move
   // the left wheel forward.
 
- 
+  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
   OCR0A = val;
   OCR0B = 0;
   OCR2A = 0;
   OCR2B = val;
+  TCNT0 = 0;
+  TCNT2 = 0;
+  GTCCR = 0;
   /*
   analogWrite(RR, val);
   analogWrite(LF, val);
@@ -877,7 +892,13 @@ void handleCommand(TPacket *command)
     // For movement commands, param[0] = distance, param[1] = speed.
     case COMMAND_FORWARD:
         sendOK();
+
+        int dist, vel;
+        dist = (int)command->params[0];
+        vel = (int)command->params[1];
+        //dbprint("hello there dist: %d, vel: %d", dist, vel);
         forward((float) command->params[0], (float) command->params[1]);
+
       break;
 
     case COMMAND_REVERSE:
@@ -896,6 +917,7 @@ void handleCommand(TPacket *command)
       break;
 
     case COMMAND_STOP:
+        
         sendOK();
         stop();
       break;

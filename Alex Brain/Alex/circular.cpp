@@ -1,7 +1,7 @@
 #include "circular.h"
 
 
-#define array_size 200
+#define array_size 300
 circular::circular()
 {
     front_pointer = 0;

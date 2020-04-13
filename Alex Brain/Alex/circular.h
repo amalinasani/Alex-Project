@@ -4,7 +4,7 @@
 class circular
 {
 private:
-    unsigned char global_buffer[200]; //global buffer to store our stuff
+    unsigned char global_buffer[300]; //global buffer to store our stuff
     int front_pointer;
     int back_pointer;
 
