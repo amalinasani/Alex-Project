@@ -20,6 +20,13 @@ enum state
 	STOP = 5,
 }; 
 
+//distance and turning counters
+static volatile int forward_dist = 0;
+static volatile int backward_dist = 0;
+static volatile int left_dist = 0;
+static volatile int right_dist = 0;
+
+
 
 //limits
 const int velocity_high = 100;
@@ -37,6 +44,15 @@ static volatile int step = 5;
 // Tells us that the network is running.
 static volatile int networkActive=0;
 static volatile int ready_flag = 1;
+
+void reset_count()
+{
+	forward_dist = 0;
+	backward_dist = 0;
+	left_dist = 0;
+	right_dist = 0;
+}
+
 void handleError(const char *buffer)
 {
 	switch(buffer[1])
@@ -275,6 +291,7 @@ void *writerThread(void *conn)
 {
 	/*This section contains the variables necessary to create windows*/
 	int h, w;
+	int x, y; //cursor positioning
 	getmaxyx(stdscr, h, w); //gets the size of the current screen
 	int height_ins, width_ins;
 	int height_log, width_log;
@@ -299,9 +316,12 @@ void *writerThread(void *conn)
 	
 	scrollok(log, TRUE);
 	print_instructions(ins);
+	//end of window setup
 	
 
 	enum state current;
+	enum state prev;
+	prev = STOP;
 	current = STOP;
 		
 	//keeps track of the current direction that we are facing	
@@ -352,7 +372,18 @@ void *writerThread(void *conn)
 				case 'w':
 				case 'W':
 					current = FORWARD;
-					wprintw(log, "Forward\n");
+					if (prev != current)
+					{
+						reset_count();
+						//forward_dist += step;
+						wprintw(log, "\n");
+						prev = current;
+					}
+					getyx(log, y, x);
+					wmove(log, y, 0);
+					wclrtoeol(log);
+					forward_dist += step;
+					wprintw(log, "Forward: %d", forward_dist);
 					buffer[1] = 'f';
 					params[0] = step;
 					params[1] = velocity;
@@ -363,8 +394,20 @@ void *writerThread(void *conn)
 					break;
 				case 's':
 				case 'S':
+					
 					current = BACKWARD;
-					wprintw(log, "Backward\n");
+					if (prev != current)
+					{
+						reset_count();
+						//backward_dist += step;
+						wprintw(log, "\n");
+						prev = current;
+					}
+					getyx(log, y, x);
+					wmove(log, y, 0);
+					wclrtoeol(log);
+					backward_dist += step;
+					wprintw(log, "Backward: %d", backward_dist);
 					buffer[1] = 'b';
 					params[0] = step;
 					params[1] = velocity;
@@ -376,7 +419,18 @@ void *writerThread(void *conn)
 				case 'a':
 				case 'A':
 					current = LEFT;
-					wprintw(log,"turn left\n");
+					if (prev != current)
+					{
+						reset_count();
+						//left_dist += angle;
+						wprintw(log, "\n");
+						prev = current;
+					}
+					getyx(log, y, x);
+					wmove(log, y, 0);
+					wclrtoeol(log);
+					left_dist += angle;
+					wprintw(log, "Turn Left: %d", left_dist);
 					buffer[1] = 'l';
 					params[0] = angle;
 					params[1] = velocity;
@@ -388,7 +442,18 @@ void *writerThread(void *conn)
 				case 'd':
 				case 'D':
 					current = RIGHT;
-					wprintw(log, "turn right\n");		//getParams(params);
+					if (prev != current)
+					{
+						reset_count();
+						//right_dist += angle;
+						wprintw(log, "\n");
+						prev = current;
+					}
+					getyx(log, y, x);
+					wmove(log, y, 0);
+					wclrtoeol(log);
+					right_dist += angle;
+					wprintw(log, "Turn Right: %d", right_dist);
 					params[0] = angle;
 					params[1] = velocity;
 					buffer[1] = 'r';
@@ -420,7 +485,7 @@ void *writerThread(void *conn)
 					if (stop_flag == 0) 
 					{
 						current = STOP;
-						wprintw(log, "vehicle stopped\n");
+						//wprintw(log, "vehicle stopped\n");
 						params[0] = 0;
 						params[1] = 0;
 						memcpy(&buffer[2], params, sizeof(params));
