@@ -329,6 +329,7 @@ void *writerThread(void *conn)
 
 	int quit=0;
 	int stop_flag = 0; //indicate when machine has stopped
+	bool change_dir = false;
 	printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
 	while(!quit)
 	{
@@ -346,6 +347,7 @@ void *writerThread(void *conn)
 		buffer[0] = NET_COMMAND_PACKET;
 		if(ready_flag)
 		{
+			change_dir = (current == STOP) ? true: false;
 			wrefresh(log);
 			switch(ch)
 			{
@@ -378,6 +380,7 @@ void *writerThread(void *conn)
 						//forward_dist += step;
 						wprintw(log, "\n");
 						prev = current;
+						change_dir = true;
 					}
 					getyx(log, y, x);
 					wmove(log, y, 0);
@@ -388,9 +391,14 @@ void *writerThread(void *conn)
 					params[0] = step;
 					params[1] = velocity;
 					memcpy(&buffer[2], params, sizeof(params));
-					sendData(conn, buffer, sizeof(buffer));
-					ready_flag = 0;
-					stop_flag = 0;
+					if (step != 0 || change_dir == true) //infinity step no need to repeatedly send
+					{					
+						sendData(conn, buffer, sizeof(buffer));
+						ready_flag = 0;
+						stop_flag = 0;
+					}
+					//ready_flag = 0;
+					//stop_flag = 0;
 					break;
 				case 's':
 				case 'S':
@@ -402,6 +410,7 @@ void *writerThread(void *conn)
 						//backward_dist += step;
 						wprintw(log, "\n");
 						prev = current;
+						change_dir = true;
 					}
 					getyx(log, y, x);
 					wmove(log, y, 0);
@@ -412,9 +421,13 @@ void *writerThread(void *conn)
 					params[0] = step;
 					params[1] = velocity;
 					memcpy(&buffer[2], params, sizeof(params));
-					sendData(conn, buffer, sizeof(buffer));
-					ready_flag = 0;
-					stop_flag = 0;
+					if (step != 0 || change_dir == true) //infinity step no need to repeatedly send
+					{					
+						sendData(conn, buffer, sizeof(buffer));
+						ready_flag = 0;
+						stop_flag = 0;
+					}
+
 					break;	
 				case 'a':
 				case 'A':
@@ -425,6 +438,7 @@ void *writerThread(void *conn)
 						//left_dist += angle;
 						wprintw(log, "\n");
 						prev = current;
+						change_dir = true;
 					}
 					getyx(log, y, x);
 					wmove(log, y, 0);
@@ -435,9 +449,13 @@ void *writerThread(void *conn)
 					params[0] = angle;
 					params[1] = velocity;
 					memcpy(&buffer[2], params, sizeof(params));
-					sendData(conn, buffer, sizeof(buffer));
-					ready_flag = 0;
-					stop_flag = 0;
+					if (angle != 0 || change_dir == true) //infinity step no need to repeatedly send
+					{					
+						sendData(conn, buffer, sizeof(buffer));
+						ready_flag = 0;
+						stop_flag = 0;
+					}
+
 					break;
 				case 'd':
 				case 'D':
@@ -448,6 +466,7 @@ void *writerThread(void *conn)
 						//right_dist += angle;
 						wprintw(log, "\n");
 						prev = current;
+						change_dir = true;
 					}
 					getyx(log, y, x);
 					wmove(log, y, 0);
@@ -458,9 +477,13 @@ void *writerThread(void *conn)
 					params[1] = velocity;
 					buffer[1] = 'r';
 					memcpy(&buffer[2], params, sizeof(params));
-					sendData(conn, buffer, sizeof(buffer));
-					ready_flag = 0;
-					stop_flag = 0;
+					if (angle != 0 || change_dir == true) //infinity step no need to repeatedly send
+					{					
+						sendData(conn, buffer, sizeof(buffer));
+						ready_flag = 0;
+						stop_flag = 0;
+					}
+
 					break;
 				case 'c':
 				case 'C':
@@ -485,6 +508,7 @@ void *writerThread(void *conn)
 					if (stop_flag == 0) 
 					{
 						current = STOP;
+						change_dir = true;
 						//wprintw(log, "vehicle stopped\n");
 						params[0] = 0;
 						params[1] = 0;
