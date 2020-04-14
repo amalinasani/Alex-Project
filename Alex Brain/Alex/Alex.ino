@@ -1,22 +1,12 @@
 #include <stdarg.h>
 #include <math.h>
-#include <avr/sleep.h>
+
 #include <serialize.h>
 
 #include "packet.h"
 #include "constants.h"
 #include "circular.h"
 
-// Power reduction
-#define PRR_TWI_MASK 0b10000000
-#define PRR_SPI_MASK 0b00000100
-#define ADCSRA_ADC_MASK 0b10000000
-#define PRR_ADC_MASK 0b00000001
-#define PRR_TIMER2_MASK 0b01000000
-#define PRR_TIMER0_MASK 0b00100000
-#define PRR_TIMER1_MASK 0b00001000
-#define SMCR_SLEEP_ENABLE_MASK 0b00000001
-#define SMCR_IDLE_MODE_MASK 0b11110001
 
 // Alex's length and breadth in cm
 #define ALEX_LENGTH 6.5
@@ -97,65 +87,6 @@ unsigned long newDist;
 // Variables to keep track of turning angle
 unsigned long deltaTicks;
 unsigned long targetTicks;
-
-
-/*
-* Power reduction 
-*/
- 
-void WDT_off(void)
-{
-  /* Global interrupt should be turned OFF here if not
-  already done so */
-  /* Clear WDRF in MCUSR */
-  MCUSR &= ~(1<<WDRF);
-  /* Write logical one to WDCE and WDE */
-  /* Keep old prescaler setting to prevent unintentional
-  time-out */
-  WDTCSR |= (1<<WDCE) | (1<<WDE);
-  /* Turn off WDT */
-  WDTCSR = 0x00;
-  /* Global interrupt should be turned ON here if
-  subsequent operations after calling this function do
-  not require turning off global interrupt */
-}
-
-void setupPowerSaving()
-{
-  // Turn off the Watchdog Timer
-  WDT_off();
-  // Modify PRR to shut down TWI
-  PRR |= PRR_TWI_MASK;
-  // Modify PRR to shut down SPI
-  PRR |= PRR_SPI_MASK;
-  // Modify ADCSRA to disable ADC,
-  ADCSRA &= ~ADCSRA_ADC_MASK;
-  // then modify PRR to shut down ADC
-  PRR |= PRR_ADC_MASK;
-  // Set the SMCR to choose the IDLE sleep mode
-  SMCR &= SMCR_IDLE_MODE_MASK;
-  // Do not set the Sleep Enable (SE) bit yet
-  // Set Port B Pin 5 as output pin, then write a logic LOW
-  // to it so that the LED tied to Arduino's Pin 13 is OFF.
-  DDRB |= B00100000;
-  PORTB &= B11011111;
-}
-
-void putArduinoToIdle()
-{
-  // Modify PRR to shut down TIMER 0, 1, and 2
-  PRR |= (PRR_TIMER0_MASK | PRR_TIMER1_MASK | PRR_TIMER2_MASK);
-  // Modify SE bit in SMCR to enable (i.e., allow) sleep
-  SMCR |= SMCR_SLEEP_ENABLE_MASK;
-  // The following function puts ATmega328P’s MCU into sleep;
-  // it wakes up from sleep when USART serial data arrives
-  sleep_cpu();
-  // Modify SE bit in SMCR to disable (i.e., disallow) sleep
-  SMCR &= ~SMCR_SLEEP_ENABLE_MASK;
-  // Modify PRR to power up TIMER 0, 1, and 2
-  PRR &= ~(PRR_TIMER0_MASK | PRR_TIMER1_MASK | PRR_TIMER2_MASK);
-}
-
 
 /*
  * 
@@ -413,66 +344,90 @@ ISR (INT1_vect)
  */
 ISR(TIMER0_COMPA_vect) //turn on the left motor forward pin6
 {
-    if(OCR0A == 0) //set to low permanently when ocroA is 0
+
+    if(OCR0A == 0) //set to low permanently when ocroA is 0, motors switch off completely for all
     {
-      PORTD &= 0b10111111;
+      PORTB &= 0b11110011;
+      
+      PORTD &= 0b10011111;
     }
-    else if (OCR0A == 255)
+    else if (OCR0A == 255) //depending on direction, set it to high
     {
-      PORTD |= 0b01000000;
+      switch(dir)
+      {
+        case(FORWARD):
+          PORTB |= 0b00000100;
+          PORTB &= 0b11110111;
+          PORTD |= 0b01000000;
+          PORTD &= 0b11011111;
+          break;
+
+        case (BACKWARD):
+          PORTB |= 0b00001000;
+          PORTB &= 0b11111011;
+          PORTD |= 0b00100000;
+          PORTD &= 0b10111111;
+          break;
+
+        case (RIGHT):
+          PORTB |= 0b00001000;
+          PORTB &= 0b11111011;
+          PORTD |= 0b01000000;
+          PORTD &= 0b11011111;
+          break;
+          
+
+        case (LEFT):
+          PORTB |= 0b00000100;
+          PORTB &= 0b11110111;
+          PORTD |= 0b00100000;
+          PORTD &= 0b10111111;
+
+        
+      }
+      
     }
     else
     {
-      PORTD ^= 0b01000000; //toggle pin 6
+      switch(dir)
+      {
+        case(FORWARD): //toggle forward, zero backward
+          PORTB ^= 0b00000100;
+          PORTB &= 0b11110111;
+          PORTD ^= 0b01000000;
+          PORTD &= 0b11011111;
+          break;
+
+        case (BACKWARD):
+          PORTB ^= 0b00001000;
+          PORTB &= 0b11111011;
+          PORTD ^= 0b00100000;
+          PORTD &= 0b10111111;
+          break;
+
+        case (RIGHT):
+          PORTB ^= 0b00001000;
+          PORTB &= 0b11111011;
+          PORTD ^= 0b01000000;
+          PORTD &= 0b11011111;
+          break;
+          
+
+        case (LEFT):
+          PORTB ^= 0b00000100;
+          PORTB &= 0b11110111;
+          PORTD ^= 0b00100000;
+          PORTD &= 0b10111111;
+          break;
+
+        
+      }
+
     }
     
 }
 
-ISR(TIMER0_COMPB_vect) //turn on left motor backward pin5
-{
-    if(OCR0B == 0) //set to low permanently when ocroA is 0
-    {
-      PORTD &= 0b11011111;
-    }
-    else if (OCR0B == 255)
-    {
-      PORTD |= 0b00100000;
-    }
-    else
-    {
-      PORTD ^= 0b00100000; //toggle pin 6
-    }
-}
-ISR(TIMER2_COMPA_vect) //turn on the right motor forward pin10
-{
-    if(OCR2A == 0) //set to low permanently when ocroA is 0
-    {
-      PORTB &= 0b11111011;
-    }
-    else if (OCR2A == 255)
-    {
-      PORTB |= 0b00000100;
-    }
-    else
-    {
-      PORTB ^= 0b00000100; //toggle pin 6
-    }
-}
-ISR(TIMER2_COMPB_vect) //turn on the right motor backward pin11
-{
-    if(OCR2B == 0) //set to low permanently when ocroA is 0
-    {
-      PORTB &= 0b11110111;
-    }
-    else if (OCR2B == 255)
-    {
-      PORTB |= 0b00001000;
-    }
-    else
-    {
-      PORTB ^= 0b00001000; //toggle pin 6
-    }
-}
+
 /*
  * Setup and start codes for serial communications
  * 
@@ -601,15 +556,11 @@ void setupMotors()
   
   
   //setting up of timers
- 
   TCNT0 = 0; //initial counter
-  TCNT2 = 0; //initial counter
   TCCR0A = 0b00000001; //we shall set the PWM pins at pd6 and pd7 to be under normal operation for now, Phase correct PWM
   TCCR0B = 0b00000011; // set clock prescalar to 256
-  TCCR2A = 0b00000001; //phase correct pwm
-  TCCR2B = 0b00000110; //set clock prescalar to 256
-  TIMSK0 |= 110;
-  TIMSK2 |= 110;
+
+  TIMSK0 |= 0b00000010;
 
 
 }
@@ -620,9 +571,7 @@ void setupMotors()
 void startMotors()
 {
   OCR0A = 0; //set the duty cycle left forward
-  OCR0B = 0; //set the duty cycle left reverse
-  OCR2A = 0; //set the duty cycle right forward
-  OCR2B = 0; //set the duty cycle right reverse
+
 
   //pin setup, set these pins to output for pin 5, 6, 10, 11
   DDRD |= 0b01100000;
@@ -672,13 +621,12 @@ void forward(float dist, float speed)
 
   GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
   OCR0A = val;
-  OCR0B = 0;
-  OCR2A = val;
-  OCR2B = 0;
-  TCNT0 = 0;
-  TCNT2 = 0;
-  GTCCR = 0;
+  PORTB &= 0b11110011;     
+  PORTD &= 0b10011111;
 
+  TCNT0 = 0;
+
+  GTCCR = 0;
   /*
   analogWrite(LF, val);
   analogWrite(RF, val);
@@ -712,13 +660,14 @@ void reverse(float dist, float speed)
   // LF = Left forward pin, LR = Left reverse pin
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
+
   GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
-  OCR0A = 0;
-  OCR0B = val;
-  OCR2A = 0;
-  OCR2B = val;
+  OCR0A = val;
+  PORTB &= 0b11110011;    
+  PORTD &= 0b10011111;
+
   TCNT0 = 0;
-  TCNT2 = 0;
+
   GTCCR = 0;
   /*
   analogWrite(LR, val);
@@ -753,13 +702,14 @@ void left(float ang, float speed)
 
   targetTicks = leftReverseTicksTurns + deltaTicks;
 
-  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);  
-  OCR0A = 0;
-  OCR0B = val;
-  OCR2A = val;
-  OCR2B = 0;
+  
+  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
+  OCR0A = val;
+  PORTB &= 0b11110011;  
+  PORTD &= 0b10011111;
+
   TCNT0 = 0;
-  TCNT2 = 0;
+
   GTCCR = 0;
 /*
   analogWrite(LR, val);
@@ -791,13 +741,14 @@ void right(float ang, float speed)
   // To turn right we reverse the right wheel and move
   // the left wheel forward.
 
+ 
   GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
   OCR0A = val;
-  OCR0B = 0;
-  OCR2A = 0;
-  OCR2B = val;
+  PORTB &= 0b11110011; 
+  PORTD &= 0b10011111;
+
   TCNT0 = 0;
-  TCNT2 = 0;
+
   GTCCR = 0;
   /*
   analogWrite(RR, val);
@@ -814,9 +765,9 @@ void stop()
 
   
   OCR0A = 0;
-  OCR0B = 0;
-  OCR2A = 0;
-  OCR2B = 0;
+  //OCR0B = 0;
+  //OCR2A = 0;
+  //OCR2B = 0;
   /*
   analogWrite(LF, 0);
   analogWrite(LR, 0);
@@ -892,13 +843,7 @@ void handleCommand(TPacket *command)
     // For movement commands, param[0] = distance, param[1] = speed.
     case COMMAND_FORWARD:
         sendOK();
-
-        int dist, vel;
-        dist = (int)command->params[0];
-        vel = (int)command->params[1];
-        //dbprint("hello there dist: %d, vel: %d", dist, vel);
         forward((float) command->params[0], (float) command->params[1]);
-
       break;
 
     case COMMAND_REVERSE:
@@ -917,7 +862,6 @@ void handleCommand(TPacket *command)
       break;
 
     case COMMAND_STOP:
-        
         sendOK();
         stop();
       break;
@@ -978,7 +922,6 @@ void setup() {
   alexCirc = PI * alexDiagonal;
 
   cli();
-  setupPowerSaving();
   setupEINT();
   setupSerial();
   startSerial();
@@ -1073,7 +1016,6 @@ void loop() {
        deltaDist = 0;
        newDist = 0;
        stop();
-       putArduinoToIdle();
     }
   }
 
@@ -1102,7 +1044,6 @@ void loop() {
       deltaTicks = 0;
       targetTicks = 0;
       stop();
-      putArduinoToIdle();
     }
   }    
 }
