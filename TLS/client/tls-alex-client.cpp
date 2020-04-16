@@ -504,9 +504,10 @@ void *writerThread(void *conn)
 				case 'b':
 				case 'B':
 				default:
-					
+					//when stopped, can add to cumulative distance
 					if (stop_flag == 0) 
 					{
+						halfdelay(3);
 						current = STOP;
 						change_dir = true;
 						//wprintw(log, "vehicle stopped\n");
@@ -520,6 +521,11 @@ void *writerThread(void *conn)
 						//printf("BAD COMMAND\n");
 					}
 					break;
+			}
+		
+			if (current == prev)
+			{
+				halfdelay(1); //reduce waiting time to improve responsiveness
 			}
 		}
 	update_state(state, current);
