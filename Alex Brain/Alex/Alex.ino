@@ -123,7 +123,7 @@ void speed_set(int left, int right, TDirection movement)
       OCR2A = right;
       break;
 
-    case LEFT:
+    case RIGHT:
       OCR0A = left;
       OCR0B = 0;
       OCR1BH = 0;
@@ -131,7 +131,7 @@ void speed_set(int left, int right, TDirection movement)
       OCR2A = right;
       break;
 
-    case RIGHT:
+    case LEFT:
       OCR0A = 0;
       OCR0B = left;
       OCR1BH = 0;
@@ -157,67 +157,69 @@ void speed_set(int left, int right, TDirection movement)
 void speed_adjust(TDirection movement)
 {
   //function used to adjust the speed using P control
-  float difference;
+  float left_over_right, right_over_left;
   float p = 0.005;
   float result = 0.0;
   int curr_left;
   int curr_right;
   int new_left, new_right;
 
+
   
-  difference = float (leftForwardTicks - rightForwardTicks);
+  
 
   switch(movement) //depending on movement, read the different speed values
   {
     case FORWARD:
       curr_left = OCR0A;
       curr_right = OCR1BL;
+      left_over_right = ((float)leftForwardTicks)/((float)rightForwardTicks);
+      right_over_left = ((float)rightForwardTicks)/((float)leftForwardTicks);
       break;
 
     case BACKWARD:
       curr_left = OCR0B;
       curr_right = OCR2A;
+      left_over_right = ((float)leftReverseTicks)/((float)rightReverseTicks);
+      right_over_left = ((float)rightReverseTicks)/((float)leftReverseTicks);
       break;
 
-    case LEFT:
+    case RIGHT:
       curr_left = OCR0A;
       curr_right = OCR2A;
       break;
 
-    case RIGHT:
+    case LEFT:
       curr_left = OCR0B;
       curr_right = OCR1BL;
       break;
     
   }
 
-  //positive means left wheel faster, negative means right wheel faster
-  //for sake of simplicity, we will only be adjusting the left wheel
+  
+  //we will try to adjust the right wheel first
+  //the only time when we cannot adjust the right wheel is if its at max power and ratio is greater than one
+  //or if it is at min power and ratio is less than one
 
-  if(difference < 0) //need to speed up left wheel
+  if (curr_right >= 255 && left_over_right > 1.0) //cannot speed up right wheel, slow down left instead
   {
-    if(curr_left >=255) //left is moving too fast, cannot speed up any more
-    {
-      //alternate strategy, reduce speed of right wheel
-      new_right = curr_right - (int)((-difference) * p);  
-    }
-    else
-    {
-      new_left = curr_left + (int)((-difference) * p);
-    }
+    new_left = (int)((float)curr_left * right_over_left);
+    new_right = curr_right;
   }
-  else //need to speed up right wheel
+
+  else if (curr_right <=75 && left_over_right < 1.0) //cannot slow down any futher, speed up left instead
   {
-    if(curr_right >= 255) //right is moving too fast, cannot speed up anymore
-    {
-      //alternate stategy, reduce speed of left wheel
-      new_left = curr_left - (int)(difference * p);
-    }
-    else
-    {
-      new_right = curr_right + (int)(difference * p);
-    }
+    new_left = (int)((float)curr_left * right_over_left);
+    new_right = curr_right;
   }
+  else
+  {
+    new_left = curr_left;
+    new_right = (int)((float)curr_right * left_over_right);
+  }
+  
+
+  
 
 
   speed_set(new_left, new_right, movement);
@@ -739,6 +741,7 @@ void reverse(float dist, float speed)
   // This will be replaced later with bare-metal code.
 
   speed_set(val, val, BACKWARD);
+  prev_time = millis();
   /*
   analogWrite(LR, val);
   analogWrite(RR, val);
@@ -1058,8 +1061,7 @@ void loop() {
         stop();
       }
 
-      int diff;
-      diff = leftForwardTicks - rightReverseTicks;
+      
       current_time = millis();
       if(current_time - prev_time > 1000)
       {
@@ -1074,6 +1076,12 @@ void loop() {
         deltaDist = 0;
         newDist = 0;
         stop();
+      }
+      current_time = millis();
+      if(current_time - prev_time > 1000)
+      {
+        speed_adjust(BACKWARD);
+        prev_time = millis();
       }
     }
 
