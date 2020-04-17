@@ -18,6 +18,10 @@ float alexDiagonal = 0.0;
 // Alex's turning circumference
 float alexCirc = 0.0;
 
+//timer for alex's speed adjustment
+unsigned long int current_time = 0;
+unsigned long int prev_time = 0;
+
 typedef enum
 {
   STOP = 0,
@@ -96,6 +100,130 @@ unsigned long targetTicks;
 
 static circular buffer_tx;
 static circular buffer_rx;
+
+void speed_set(int left, int right, TDirection movement)
+{
+
+  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
+
+  switch(movement)
+  {
+    case FORWARD:
+      OCR0A = left;
+      OCR0B = 0;
+      OCR1BH = 0;
+      OCR1BL = right;
+      OCR2A = 0;
+      break;
+    case BACKWARD:
+      OCR0A = 0;
+      OCR0B = left;
+      OCR1BH = 0;
+      OCR1BL = 0;
+      OCR2A = right;
+      break;
+
+    case LEFT:
+      OCR0A = left;
+      OCR0B = 0;
+      OCR1BH = 0;
+      OCR1BL = 0;
+      OCR2A = right;
+      break;
+
+    case RIGHT:
+      OCR0A = 0;
+      OCR0B = left;
+      OCR1BH = 0;
+      OCR1BL = right;
+      OCR2A = 0;
+      break;
+
+    case STOP:
+      OCR0A = 0;
+      OCR0B = 0;
+      OCR1BH = 0;
+      OCR1BL = 0;
+      OCR2A = 0;
+      break;
+    
+  }
+
+  GTCCR = 0;
+
+  
+}
+
+void speed_adjust(TDirection movement)
+{
+  //function used to adjust the speed using P control
+  float difference;
+  float p = 0.005;
+  float result = 0.0;
+  int curr_left;
+  int curr_right;
+  int new_left, new_right;
+
+  
+  difference = float (leftForwardTicks - rightForwardTicks);
+
+  switch(movement) //depending on movement, read the different speed values
+  {
+    case FORWARD:
+      curr_left = OCR0A;
+      curr_right = OCR1BL;
+      break;
+
+    case BACKWARD:
+      curr_left = OCR0B;
+      curr_right = OCR2A;
+      break;
+
+    case LEFT:
+      curr_left = OCR0A;
+      curr_right = OCR2A;
+      break;
+
+    case RIGHT:
+      curr_left = OCR0B;
+      curr_right = OCR1BL;
+      break;
+    
+  }
+
+  //positive means left wheel faster, negative means right wheel faster
+  //for sake of simplicity, we will only be adjusting the left wheel
+
+  if(difference < 0) //need to speed up left wheel
+  {
+    if(curr_left >=255) //left is moving too fast, cannot speed up any more
+    {
+      //alternate strategy, reduce speed of right wheel
+      new_right = curr_right - (int)((-difference) * p);  
+    }
+    else
+    {
+      new_left = curr_left + (int)((-difference) * p);
+    }
+  }
+  else //need to speed up right wheel
+  {
+    if(curr_right >= 255) //right is moving too fast, cannot speed up anymore
+    {
+      //alternate stategy, reduce speed of left wheel
+      new_left = curr_left - (int)(difference * p);
+    }
+    else
+    {
+      new_right = curr_right + (int)(difference * p);
+    }
+  }
+
+
+  speed_set(new_left, new_right, movement);
+
+  
+}
  
 TResult readPacket(TPacket *packet)
 {
@@ -340,94 +468,30 @@ ISR (INT1_vect)
 
 /*For this section, we will need to set it in such a way that only one of these will trigger at a time
  * in other words, if compA has a ocroa value of 128, comp b should have zero to produce constant low
- * 
+ * D is left, B is right
  */
+
 ISR(TIMER0_COMPA_vect) //turn on the left motor forward pin6
 {
-
-    if(OCR0A == 0) //set to low permanently when ocroA is 0, motors switch off completely for all
-    {
-      PORTB &= 0b11110011;
-      
-      PORTD &= 0b10011111;
-    }
-    else if (OCR0A == 255) //depending on direction, set it to high
-    {
-      switch(dir)
-      {
-        case(FORWARD):
-          PORTB |= 0b00000100;
-          PORTB &= 0b11110111;
-          PORTD |= 0b01000000;
-          PORTD &= 0b11011111;
-          break;
-
-        case (BACKWARD):
-          PORTB |= 0b00001000;
-          PORTB &= 0b11111011;
-          PORTD |= 0b00100000;
-          PORTD &= 0b10111111;
-          break;
-
-        case (RIGHT):
-          PORTB |= 0b00001000;
-          PORTB &= 0b11111011;
-          PORTD |= 0b01000000;
-          PORTD &= 0b11011111;
-          break;
-          
-
-        case (LEFT):
-          PORTB |= 0b00000100;
-          PORTB &= 0b11110111;
-          PORTD |= 0b00100000;
-          PORTD &= 0b10111111;
-
-        
-      }
-      
-    }
-    else
-    {
-      switch(dir)
-      {
-        case(FORWARD): //toggle forward, zero backward
-          PORTB ^= 0b00000100;
-          PORTB &= 0b11110111;
-          PORTD ^= 0b01000000;
-          PORTD &= 0b11011111;
-          break;
-
-        case (BACKWARD):
-          PORTB ^= 0b00001000;
-          PORTB &= 0b11111011;
-          PORTD ^= 0b00100000;
-          PORTD &= 0b10111111;
-          break;
-
-        case (RIGHT):
-          PORTB ^= 0b00001000;
-          PORTB &= 0b11111011;
-          PORTD ^= 0b01000000;
-          PORTD &= 0b11011111;
-          break;
-          
-
-        case (LEFT):
-          PORTB ^= 0b00000100;
-          PORTB &= 0b11110111;
-          PORTD ^= 0b00100000;
-          PORTD &= 0b10111111;
-          break;
-
-        
-      }
-
-    }
+  //do nothing
     
 }
 
+ISR(TIMER0_COMPB_vect) //turn on the right motors
+{
+  //do nothing
+    
+}
 
+ISR(TIMER1_COMPB_vect)
+{
+  //do nothing, already done from initial setup
+}
+
+ISR(TIMER2_COMPA_vect)
+{
+  //do nothing
+}
 /*
  * Setup and start codes for serial communications
  * 
@@ -557,10 +621,26 @@ void setupMotors()
   
   //setting up of timers
   TCNT0 = 0; //initial counter
-  TCCR0A = 0b00000001; //we shall set the PWM pins at pd6 and pd7 to be under normal operation for now, Phase correct PWM
-  TCCR0B = 0b00000011; // set clock prescalar to 256
+  TCNT1H = 0;
+  TCNT1L = 0;
+  TCNT2 = 0;
 
-  TIMSK0 |= 0b00000010;
+  
+  TCCR0A = 0b10100001; //we shall set the PWM pins at pd6 and pd7 to be under normal operation for now, Phase correct PWM
+  TCCR0B = 0b00000011; // set clock prescalar to 64
+
+  TCCR1A = 0b00100001;//PWM operation 8 bit only
+  TCCR1B = 0b00000011;//set clock prescalar to 64
+
+  TCCR2A = 0b10000001;//pwm operation
+  TCCR2B = 0b00000100;//set clock prescalar to 64
+
+  
+  TIMSK0 |= 0b00000111; //OCOA, OCOB, overflow for millis
+  TIMSK1 |= 0b00000100; //OC1B only
+  TIMSK2 |= 0b00000010; //OC2A only
+  
+  
 
 
 }
@@ -571,7 +651,10 @@ void setupMotors()
 void startMotors()
 {
   OCR0A = 0; //set the duty cycle left forward
-
+  OCR0B = 0;
+  OCR1BH = 0;
+  OCR1BL = 0;
+  OCR2A = 0;
 
   //pin setup, set these pins to output for pin 5, 6, 10, 11
   DDRD |= 0b01100000;
@@ -619,14 +702,8 @@ void forward(float dist, float speed)
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
 
-  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
-  OCR0A = val;
-  PORTB &= 0b11110011;     
-  PORTD &= 0b10011111;
-
-  TCNT0 = 0;
-
-  GTCCR = 0;
+  speed_set(val, val, FORWARD);
+  prev_time = millis();
   /*
   analogWrite(LF, val);
   analogWrite(RF, val);
@@ -661,14 +738,7 @@ void reverse(float dist, float speed)
   // RF = Right forward pin, RR = Right reverse pin
   // This will be replaced later with bare-metal code.
 
-  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
-  OCR0A = val;
-  PORTB &= 0b11110011;    
-  PORTD &= 0b10011111;
-
-  TCNT0 = 0;
-
-  GTCCR = 0;
+  speed_set(val, val, BACKWARD);
   /*
   analogWrite(LR, val);
   analogWrite(RR, val);
@@ -703,14 +773,7 @@ void left(float ang, float speed)
   targetTicks = leftReverseTicksTurns + deltaTicks;
 
   
-  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
-  OCR0A = val;
-  PORTB &= 0b11110011;  
-  PORTD &= 0b10011111;
-
-  TCNT0 = 0;
-
-  GTCCR = 0;
+  speed_set(val, val, LEFT);
 /*
   analogWrite(LR, val);
   analogWrite(RF, val);
@@ -742,14 +805,7 @@ void right(float ang, float speed)
   // the left wheel forward.
 
  
-  GTCCR = (1<<TSM) | (1<<PSRASY) | (1<<PSRSYNC);
-  OCR0A = val;
-  PORTB &= 0b11110011; 
-  PORTD &= 0b10011111;
-
-  TCNT0 = 0;
-
-  GTCCR = 0;
+  speed_set(val, val, RIGHT);
   /*
   analogWrite(RR, val);
   analogWrite(LF, val);
@@ -764,7 +820,7 @@ void stop()
   dir = STOP;
 
   
-  OCR0A = 0;
+  speed_set(0, 0, STOP);
   //OCR0B = 0;
   //OCR2A = 0;
   //OCR2B = 0;
@@ -957,6 +1013,7 @@ void handlePacket(TPacket *packet)
 }
 
 
+
 void loop() {
 
 // Uncomment the code below for Step 2 of Activity 3 in Week 8 Studio 2
@@ -999,6 +1056,15 @@ void loop() {
         deltaDist = 0;
         newDist = 0;
         stop();
+      }
+
+      int diff;
+      diff = leftForwardTicks - rightReverseTicks;
+      current_time = millis();
+      if(current_time - prev_time > 1000)
+      {
+        speed_adjust(FORWARD);
+        prev_time = millis();
       }
     }
     else if (dir == BACKWARD)
