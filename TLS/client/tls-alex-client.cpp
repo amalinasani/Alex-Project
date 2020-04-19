@@ -44,6 +44,7 @@ static volatile int step = 5;
 // Tells us that the network is running.
 static volatile int networkActive=0;
 static volatile int ready_flag = 1;
+static volatile bool dist_process = false;
 
 void reset_count()
 {
@@ -51,6 +52,18 @@ void reset_count()
 	backward_dist = 0;
 	left_dist = 0;
 	right_dist = 0;
+}
+
+void infinite_report(char *buffer, int32_t *params)
+{
+	//first, send out the command to retrieve how far each of the items hae travelled
+	//once you send out the get status command and processed the status, we can then proceed
+	buffer[1] = 'g';
+	params[0] = 0;
+	params[1] = 0;
+	memcpy(&buffer[2], params, sizeof(params));
+
+	
 }
 
 void handleError(const char *buffer)
@@ -88,7 +101,7 @@ void handleStatus(const char *buffer)
 	int32_t data[16];
 	memcpy(data, &buffer[1], sizeof(data));
 
-	printf("\n ------- ALEX STATUS REPORT ------- \n\n");
+	/*printf("\n ------- ALEX STATUS REPORT ------- \n\n");
 	printf("Left Forward Ticks:\t\t%d\n", data[0]);
 	printf("Right Forward Ticks:\t\t%d\n", data[1]);
 	printf("Left Reverse Ticks:\t\t%d\n", data[2]);
@@ -99,7 +112,11 @@ void handleStatus(const char *buffer)
 	printf("Right Reverse Ticks Turns:\t%d\n", data[7]);
 	printf("Forward Distance:\t\t%d\n", data[8]);
 	printf("Reverse Distance:\t\t%d\n", data[9]);
-	printf("\n---------------------------------------\n\n");
+	printf("\n---------------------------------------\n\n");*/
+
+	forward_dist += data[8];
+	backward_dist += data[9];
+	dist_process = true;
 }
 
 void handleMessage(const char *buffer)
@@ -286,6 +303,29 @@ void update_settings(WINDOW* win)
 	wprintw(win, "MACHINE SETTING");
 }
 
+void update_dist(enum state now, WINDOW* screen)
+{
+	int y, x;	
+	getyx(screen, y, x);
+	wmove(screen, y, 0);
+	wclrtoeol(screen);
+	switch(now)
+	{
+		case FORWARD:
+			wprintw(screen, "Forward: %d", forward_dist);
+			break;
+			
+		case BACKWARD:
+			wprintw(screen, "Backward: %d", backward_dist);
+			break;
+		case LEFT:
+			wprintw(screen, "Turn Left: %d", left_dist);
+			break;
+		case RIGHT:
+			wprintw(screen, "Turn Right: %d", right_dist);
+			break;
+	}
+}
 
 void *writerThread(void *conn)
 {
@@ -382,11 +422,9 @@ void *writerThread(void *conn)
 						prev = current;
 						change_dir = true;
 					}
-					getyx(log, y, x);
-					wmove(log, y, 0);
-					wclrtoeol(log);
+					
 					forward_dist += step;
-					wprintw(log, "Forward: %d", forward_dist);
+					update_dist(current, log);
 					buffer[1] = 'f';
 					params[0] = step;
 					params[1] = velocity;
@@ -412,11 +450,9 @@ void *writerThread(void *conn)
 						prev = current;
 						change_dir = true;
 					}
-					getyx(log, y, x);
-					wmove(log, y, 0);
-					wclrtoeol(log);
+					
 					backward_dist += step;
-					wprintw(log, "Backward: %d", backward_dist);
+					update_dist(current, log);
 					buffer[1] = 'b';
 					params[0] = step;
 					params[1] = velocity;
@@ -440,11 +476,9 @@ void *writerThread(void *conn)
 						prev = current;
 						change_dir = true;
 					}
-					getyx(log, y, x);
-					wmove(log, y, 0);
-					wclrtoeol(log);
+					
 					left_dist += angle;
-					wprintw(log, "Turn Left: %d", left_dist);
+					update_dist(current, log);
 					buffer[1] = 'l';
 					params[0] = angle;
 					params[1] = velocity;
@@ -468,11 +502,9 @@ void *writerThread(void *conn)
 						prev = current;
 						change_dir = true;
 					}
-					getyx(log, y, x);
-					wmove(log, y, 0);
-					wclrtoeol(log);
+					
 					right_dist += angle;
-					wprintw(log, "Turn Right: %d", right_dist);
+					update_dist(current, log);
 					params[0] = angle;
 					params[1] = velocity;
 					buffer[1] = 'r';
@@ -485,17 +517,7 @@ void *writerThread(void *conn)
 					}
 
 					break;
-				case 'c':
-				case 'C':
-				case 'g':
-				case 'G':
-						params[0]=0;
-						params[1]=0;
-						memcpy(&buffer[2], params, sizeof(params));
-						buffer[1] = ch;
-						sendData(conn, buffer, sizeof(buffer));
-						ready_flag = 0;
-						break;
+
 				case 'q':
 				case 'Q':
 					quit=1;
@@ -518,6 +540,15 @@ void *writerThread(void *conn)
 						sendData(conn, buffer, sizeof(buffer));
 						ready_flag = 0;
 						stop_flag = 1;
+						if((step == 0 && (prev == FORWARD || prev == BACKWARD)) || (angle == 0 && (prev == LEFT || prev == RIGHT)))
+						{
+							//infinity
+							while(ready_flag == 0);
+							infinite_report(buffer, params);
+							sendData(conn, buffer, sizeof(buffer));
+							dist_process = false;
+							while (dist_process == false);
+						}
 						//printf("BAD COMMAND\n");
 					}
 					break;
@@ -526,6 +557,10 @@ void *writerThread(void *conn)
 			if (current == prev)
 			{
 				halfdelay(1); //reduce waiting time to improve responsiveness
+			}
+			if (step == 0 || angle == 0)//infinity, need to update one more time
+			{
+				update_dist(prev, log);
 			}
 		}
 	update_state(state, current);
