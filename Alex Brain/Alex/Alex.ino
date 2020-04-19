@@ -93,6 +93,8 @@ volatile unsigned long rightRevs;
 // Forward and backward distance traveled
 volatile float forwardDist;
 volatile float reverseDist;
+volatile float leftangle;
+volatile float rightangle;
 
 //variables to keep track of whether we have moved a commanded distance
 unsigned long deltaDist;
@@ -346,6 +348,8 @@ void sendStatus()
   statusPacket.params[7] = rightReverseTicksTurns;
   statusPacket.params[8] = forwardDist;
   statusPacket.params[9] = reverseDist;
+  statusPacket.params[10] = leftangle;
+  statusPacket.params[11] = rightangle;
   sendResponse(&statusPacket);
 }
 
@@ -478,6 +482,11 @@ void leftISR()
     forwardDist = (unsigned long) ((float) leftForwardTicks / COUNTS_PER_REV * WHEEL_CIRC);
   else if (dir == BACKWARD)
     reverseDist = (unsigned long) ((float) leftReverseTicks / COUNTS_PER_REV * WHEEL_CIRC);
+  else if (dir == LEFT)
+    leftangle = (unsigned long) (((float)leftReverseTicksTurns * 360.0 * WHEEL_CIRC)/( alexCirc * (float)COUNTS_PER_REV));
+  else if (dir == RIGHT)
+    rightangle = (unsigned long) (((float)leftForwardTicksTurns * 360.0 * WHEEL_CIRC)/( alexCirc * (float)COUNTS_PER_REV));
+  
 /*  if (!(leftTicks % COUNTS_PER_REV))
     leftRevs++;
   forwardDist = leftTicks * (float)WHEEL_CIRC/COUNTS_PER_REV;
@@ -971,6 +980,8 @@ void clearCounters()
   rightRevs=0;
   forwardDist=0;
   reverseDist=0; 
+  leftangle = 0;
+  rightangle = 0;
 }
 
 // Clears one particular counter
