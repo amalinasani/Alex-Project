@@ -221,6 +221,9 @@ void speed_set(int left, int right, TDirection movement)
   
 }
 
+int prev_count_left;
+int prev_count_right;
+
 void speed_adjust(TDirection movement)
 {
   //function used to adjust the speed using P control
@@ -229,6 +232,7 @@ void speed_adjust(TDirection movement)
   float result = 0.0;
   int curr_left;
   int curr_right;
+  int curr_count_left, curr_count_right;
   int new_left, new_right;
 
 
@@ -240,15 +244,23 @@ void speed_adjust(TDirection movement)
     case FORWARD:
       curr_left = OCR0A;
       curr_right = OCR1BL;
-      left_over_right = ((float)leftForwardTicks)/((float)rightForwardTicks);
-      right_over_left = ((float)rightForwardTicks)/((float)leftForwardTicks);
+      curr_count_left = leftForwardTicks;
+      curr_count_right = rightForwardTicks;
+      left_over_right = ((float)(curr_count_left - prev_count_left))/((float)(curr_count_right - prev_count_right));
+      right_over_left = ((float)(curr_count_right - prev_count_right))/((float)(curr_count_left - prev_count_left));
+      prev_count_left = curr_count_left;
+      prev_count_right = curr_count_right;
       break;
 
     case BACKWARD:
       curr_left = OCR0B;
       curr_right = OCR2A;
-      left_over_right = ((float)leftReverseTicks)/((float)rightReverseTicks);
-      right_over_left = ((float)rightReverseTicks)/((float)leftReverseTicks);
+      curr_count_left = leftReverseTicks;
+      curr_count_right = rightReverseTicks;
+      left_over_right = ((float)(curr_count_left - prev_count_left))/((float)(curr_count_right - prev_count_right));
+      right_over_left = ((float)(curr_count_right - prev_count_right))/((float)(curr_count_left - prev_count_left));
+      prev_count_left = curr_count_left;
+      prev_count_right = curr_count_right;
       break;
 
     case RIGHT:
@@ -773,6 +785,10 @@ void forward(float dist, float speed)
 
   speed_set(val, val, FORWARD);
   prev_time = millis();
+  prev_count_left = 0;
+  prev_count_right = 0;
+  clearCounters();
+  
   /*
   analogWrite(LF, val);
   analogWrite(RF, val);
@@ -809,6 +825,9 @@ void reverse(float dist, float speed)
 
   speed_set(val, val, BACKWARD);
   prev_time = millis();
+  prev_count_left = 0;
+  prev_count_right = 0;
+  clearCounters();
   /*
   analogWrite(LR, val);
   analogWrite(RR, val);
@@ -842,6 +861,9 @@ void left(float ang, float speed)
 
   targetTicks = leftReverseTicksTurns + deltaTicks;
 
+  prev_count_left = 0;
+  prev_count_right = 0;
+  clearCounters();
   
   speed_set(val, val, LEFT);
 /*
@@ -874,6 +896,9 @@ void right(float ang, float speed)
   // To turn right we reverse the right wheel and move
   // the left wheel forward.
 
+  prev_count_left = 0;
+  prev_count_right = 0;
+  clearCounters();
  
   speed_set(val, val, RIGHT);
   /*
@@ -1130,7 +1155,7 @@ void loop() {
 
       
       current_time = millis();
-      if(current_time - prev_time > 1000)
+      if(current_time - prev_time > 250)
       {
         speed_adjust(FORWARD);
         prev_time = millis();
