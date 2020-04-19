@@ -116,6 +116,8 @@ void handleStatus(const char *buffer)
 
 	forward_dist += data[8];
 	backward_dist += data[9];
+	left_dist += data[10];
+	right_dist += data[11];
 	dist_process = true;
 }
 
