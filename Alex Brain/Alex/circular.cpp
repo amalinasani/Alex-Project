@@ -31,7 +31,7 @@ int circular::write_buffer(void* info, int size)
         max_allowed = array_size - (front_pointer - back_pointer);
     }
 
-    if ((size / sizeof(char)) >= max_allowed) //we cannot store stuff here, too little information
+    if ((size / sizeof(char)) >= max_allowed) //we cannot store stuff here, too much information
     {
         //cout << "Too much information" << endl;
         return 2;

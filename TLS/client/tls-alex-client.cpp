@@ -11,6 +11,7 @@
 // include for repeated input
 #include <ncurses.h>
 
+//indicates which movement state the machine is in
 enum state
 {
 	FORWARD = 1,
@@ -28,7 +29,7 @@ static volatile int right_dist = 0;
 
 
 
-//limits
+//limits, machine cannot go too fast or too slow
 const int velocity_high = 100;
 const int velocity_low = 35;
 const int angle_high = 45;
@@ -36,8 +37,8 @@ const int angle_low = 0;
 const int step_high = 15;
 const int step_low = 0;
 
-//settings for the machine
-static volatile int velocity = 50;
+//initial settings for the machine
+static volatile int velocity = 75;
 static volatile int angle = 20;
 static volatile int step = 5;
 
@@ -71,7 +72,7 @@ void handleError(const char *buffer)
 	switch(buffer[1])
 	{
 		case RESP_OK:
-			//wprintw(log, "Command / Status OK\n");
+			
 			ready_flag = 1; //avoid commands sent when system not ready
 			break;
 
@@ -100,19 +101,9 @@ void handleStatus(const char *buffer)
 {
 	int32_t data[16];
 	memcpy(data, &buffer[1], sizeof(data));
+	//when the getstatus command is sent, instead of printing it out, 
+	//update the current set of variables
 
-	/*printf("\n ------- ALEX STATUS REPORT ------- \n\n");
-	printf("Left Forward Ticks:\t\t%d\n", data[0]);
-	printf("Right Forward Ticks:\t\t%d\n", data[1]);
-	printf("Left Reverse Ticks:\t\t%d\n", data[2]);
-	printf("Right Reverse Ticks:\t\t%d\n", data[3]);
-	printf("Left Forward Ticks Turns:\t%d\n", data[4]);
-	printf("Right Forward Ticks Turns:\t%d\n", data[5]);
-	printf("Left Reverse Ticks Turns:\t%d\n", data[6]);
-	printf("Right Reverse Ticks Turns:\t%d\n", data[7]);
-	printf("Forward Distance:\t\t%d\n", data[8]);
-	printf("Reverse Distance:\t\t%d\n", data[9]);
-	printf("\n---------------------------------------\n\n");*/
 
 	forward_dist += data[8];
 	backward_dist += data[9];
@@ -161,10 +152,10 @@ void handleNetwork(const char *buffer, int len)
 void sendData(void *conn, const char *buffer, int len)
 {
 	int c;
-	//wprintw(log, "\nSENDING %d BYTES DATA\n\n", len);
+
 	if(networkActive)
 	{
-		/* (DONE) TODO: Insert SSL write here to write buffer to network */
+
 
 		c = sslWrite(conn, buffer, len);
 
@@ -172,7 +163,7 @@ void sendData(void *conn, const char *buffer, int len)
 			perror("Error writing to server: ");
 		}
 
-		/* END TODO */	
+
 		networkActive = (c > 0);
 	}
 }
@@ -184,12 +175,10 @@ void *readerThread(void *conn)
 
 	while(networkActive)
 	{
-		/* (DONE) TODO: Insert SSL read here into buffer */
+
 		len = sslRead(conn, buffer, sizeof(buffer));
 
-        //wprintw(log,"read %d bytes from server.\n", len);
-		
-		/* END TODO */
+
 
 		networkActive = (len > 0);
 
@@ -199,10 +188,10 @@ void *readerThread(void *conn)
 
 	printf("Exiting network listener thread\n");
     
-    /* (DONE) TODO: Stop the client loop and call EXIT_THREAD */
+
 	stopClient();
 	EXIT_THREAD(conn);
-    /* END TODO */
+
 }
 
 void flushInput()
@@ -220,7 +209,7 @@ void getParams(int32_t *params)
 	flushInput();
 }
 
-void print_instructions(WINDOW* win)
+void print_instructions(WINDOW* win) //printing commands for instruction pannel
 {
 	wmove(win, 1, 1);
 	wprintw(win, " Use the WASD keys to control the \n movement of your machine\n");
@@ -243,7 +232,7 @@ void print_instructions(WINDOW* win)
 
 }
 
-void update_state(WINDOW *win, enum state now)
+void update_state(WINDOW *win, enum state now) //print out current machine state
 {
 	wclear(win);
 
@@ -274,7 +263,7 @@ void update_state(WINDOW *win, enum state now)
 	wprintw(win, "MACHINE STATE");
 }
 
-void update_settings(WINDOW* win)
+void update_settings(WINDOW* win) //prints current vehicle settings on a panel
 {
 	wclear(win);
 
@@ -305,7 +294,7 @@ void update_settings(WINDOW* win)
 	wprintw(win, "MACHINE SETTING");
 }
 
-void update_dist(enum state now, WINDOW* screen)
+void update_dist(enum state now, WINDOW* screen) //records down vehicle movements
 {
 	int y, x;	
 	getyx(screen, y, x);
@@ -339,7 +328,7 @@ void *writerThread(void *conn)
 	int height_log, width_log;
 	int height_state, width_state;
 	int height_set, width_set;
-	
+	//dimensions of windows
 	height_ins = (3*h)/4;
 	width_ins = w/2;
 	height_log = h;
@@ -349,13 +338,13 @@ void *writerThread(void *conn)
 	height_set = 5;
 	width_set = w/2;
 
-
+	//windows creation
 	WINDOW* ins = newwin(height_ins, width_ins, 0, w/2);
 	WINDOW* log = newwin(height_log, width_log, 0, 0);
 	WINDOW* state = newwin(height_state, width_state, h-3, w/2);
 	WINDOW* set = newwin(height_set, width_set, h-height_set-height_state, w/2);
 	
-	
+	//allow for the log window to scroll when it is filled with data
 	scrollok(log, TRUE);
 	print_instructions(ins);
 	//end of window setup
@@ -366,22 +355,18 @@ void *writerThread(void *conn)
 	prev = STOP;
 	current = STOP;
 		
-	//keeps track of the current direction that we are facing	
+	//keeps track of the current and previous direction that we are facing	
 
 
 	int quit=0;
 	int stop_flag = 0; //indicate when machine has stopped
-	bool change_dir = false;
+	bool change_dir = false; //indicates any direction change
 	printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
 	while(!quit)
 	{
 		int ch;
 		ch = getch();
-		//printf("Command (f=forward, b=reverse, l=turn left, r=turn right, s=stop, c=clear stats, g=get stats q=exit)\n");
-		//scanf("%c", &ch);
 
-		// Purge extraneous characters from input stream
-		//flushInput();
 		
 		char buffer[10];
 		int32_t params[2];
@@ -419,7 +404,6 @@ void *writerThread(void *conn)
 					if (prev != current)
 					{
 						reset_count();
-						//forward_dist += step;
 						wprintw(log, "\n");
 						prev = current;
 						change_dir = true;
@@ -437,8 +421,7 @@ void *writerThread(void *conn)
 						ready_flag = 0;
 						stop_flag = 0;
 					}
-					//ready_flag = 0;
-					//stop_flag = 0;
+
 					break;
 				case 's':
 				case 'S':
@@ -447,7 +430,6 @@ void *writerThread(void *conn)
 					if (prev != current)
 					{
 						reset_count();
-						//backward_dist += step;
 						wprintw(log, "\n");
 						prev = current;
 						change_dir = true;
@@ -473,7 +455,6 @@ void *writerThread(void *conn)
 					if (prev != current)
 					{
 						reset_count();
-						//left_dist += angle;
 						wprintw(log, "\n");
 						prev = current;
 						change_dir = true;
@@ -499,7 +480,6 @@ void *writerThread(void *conn)
 					if (prev != current)
 					{
 						reset_count();
-						//right_dist += angle;
 						wprintw(log, "\n");
 						prev = current;
 						change_dir = true;
@@ -534,7 +514,6 @@ void *writerThread(void *conn)
 						halfdelay(3);
 						current = STOP;
 						change_dir = true;
-						//wprintw(log, "vehicle stopped\n");
 						params[0] = 0;
 						params[1] = 0;
 						memcpy(&buffer[2], params, sizeof(params));
@@ -544,14 +523,13 @@ void *writerThread(void *conn)
 						stop_flag = 1;
 						if((step == 0 && (prev == FORWARD || prev == BACKWARD)) || (angle == 0 && (prev == LEFT || prev == RIGHT)))
 						{
-							//infinity
+							//infinity turning or moving
 							while(ready_flag == 0);
 							infinite_report(buffer, params);
 							sendData(conn, buffer, sizeof(buffer));
 							dist_process = false;
 							while (dist_process == false);
 						}
-						//printf("BAD COMMAND\n");
 					}
 					break;
 			}
@@ -565,6 +543,7 @@ void *writerThread(void *conn)
 				update_dist(prev, log);
 			}
 		}
+	//updates and refresh what is displayed on each panel 
 	update_state(state, current);
 	update_settings(set);
 	wrefresh(log);
@@ -575,14 +554,12 @@ void *writerThread(void *conn)
 
 	printf("Exiting keyboard thread\n");
 
-    /* (DONE) TODO: Stop the client loop and call EXIT_THREAD */
+
 	stopClient();
 	EXIT_THREAD(conn);
-    /* END TODO */
+
 }
 
-/* (DONE) TODO: #define filenames for the client private key, certificatea,
-   CA filename, etc. that you need to create a client */
 
 //#define SERVER_NAME "192.168.137.93"
 #define CA_CERT_FNAME "signing.pem"
@@ -591,19 +568,17 @@ void *writerThread(void *conn)
 #define CLIENT_KEY_FNAME "laptop.key"
 #define SERVER_NAME_ON_CERT "Alex Pi"
 
-/* END TODO */
+
 void connectToServer(const char *serverName, int portNum)
 {
-    /* (DONE) TODO: Create a new client */
-	
-	//createClient(SERVER_NAME, PORT_NUM, 1, CA_CERT_FNAME, SERVER_NAME_ON_CERT, 1, CLIENT_CERT_FNAME, CLIENT_KEY_FNAME, readerThread, writerThread);
+
 	createClient(serverName, portNum, 1, CA_CERT_FNAME, SERVER_NAME_ON_CERT, 1, CLIENT_CERT_FNAME, CLIENT_KEY_FNAME, readerThread, writerThread);
 
-    /* END TODO */
 }
 
 int main(int ac, char **av)
 {
+	//initialisation of window creation code to allow for ncurses commands
 	initscr();
 	cbreak();
 	noecho();
@@ -618,12 +593,10 @@ int main(int ac, char **av)
     networkActive = 1;
     connectToServer(av[1], atoi(av[2]));
 
-    /* (DONE) TODO: Add in while loop to prevent main from exiting while the
-    client loop is running */
+
 
 	while (client_is_running());
 
-    /* END TODO */
 	printf("\nMAIN exiting\n\n");
 	endwin();
 }

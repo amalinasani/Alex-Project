@@ -93,6 +93,7 @@ volatile unsigned long rightRevs;
 // Forward and backward distance traveled
 volatile float forwardDist;
 volatile float reverseDist;
+//left and right angle turned
 volatile float leftangle;
 volatile float rightangle;
 
@@ -167,6 +168,7 @@ void putArduinoToIdle()
  * 
  */
 
+//buffers for transmission and receival
 static circular buffer_tx;
 static circular buffer_rx;
 
@@ -487,20 +489,11 @@ void leftISR()
   else if (dir == RIGHT)
     rightangle = (unsigned long) (((float)leftForwardTicksTurns * 360.0 * WHEEL_CIRC)/( alexCirc * (float)COUNTS_PER_REV));
   
-/*  if (!(leftTicks % COUNTS_PER_REV))
-    leftRevs++;
-  forwardDist = leftTicks * (float)WHEEL_CIRC/COUNTS_PER_REV;
-  Serial.print("LEFT: ");
-  Serial.print(leftRevs);
-  Serial.print(" ");
-  Serial.print(forwardDist);
-  Serial.print(" ");
-  Serial.println(leftTicks);*/
 }
 
 void rightISR()
 {
-  //I will assume that the vehicle wheels turn in the same direction when moving forward or backwards
+
   switch(dir)
   {
     case FORWARD:
@@ -524,8 +517,6 @@ void rightISR()
 
   }
 
-  //dbprint("RIGHT: ");
-  //dbprint("%d \n",rightForwardTicks);
 }
 
 // Set up the external interrupt pins INT0 and INT1
@@ -556,10 +547,7 @@ ISR (INT1_vect)
 
 // Implement INT0 and INT1 ISRs above.
 
-/*For this section, we will need to set it in such a way that only one of these will trigger at a time
- * in other words, if compA has a ocroa value of 128, comp b should have zero to produce constant low
- * D is left, B is right
- */
+
 
 ISR(TIMER0_COMPA_vect) //turn on the left motor forward pin6
 {
@@ -592,11 +580,7 @@ ISR(TIMER2_COMPA_vect)
 
 
 void setupSerial()
-{
-  // To replace later with bare-metal.
-//  Serial.begin(9600);
-
-  
+{ 
   UBRR0L = 103;
   UBRR0H = 0;
   UCSR0C = 0b00000110;
@@ -609,8 +593,7 @@ void setupSerial()
 
 void startSerial()
 {
-  // Empty for now. To be replaced with bare-metal code
-  // later on.
+
   UCSR0B = 0b10111000;
 }
 
@@ -784,26 +767,12 @@ void forward(float dist, float speed)
   dir = FORWARD;
   int val = pwmVal(speed);
 
-  // For now we will ignore dist and move
-  // forward indefinitely. We will fix this
-  // in Week 9.
-
-  // LF = Left forward pin, LR = Left reverse pin
-  // RF = Right forward pin, RR = Right reverse pin
-  // This will be replaced later with bare-metal code.
-
   speed_set(val, val, FORWARD);
   prev_time = millis();
   prev_count_left = 0;
   prev_count_right = 0;
   clearCounters();
   
-  /*
-  analogWrite(LF, val);
-  analogWrite(RF, val);
-  analogWrite(LR,0);
-  analogWrite(RR, 0);
-*/
   
 }
 
@@ -824,25 +793,13 @@ void reverse(float dist, float speed)
   dir = BACKWARD;
   int val = pwmVal(speed);
 
-  // For now we will ignore dist and 
-  // reverse indefinitely. We will fix this
-  // in Week 9.
-
-  // LF = Left forward pin, LR = Left reverse pin
-  // RF = Right forward pin, RR = Right reverse pin
-  // This will be replaced later with bare-metal code.
 
   speed_set(val, val, BACKWARD);
   prev_time = millis();
   prev_count_left = 0;
   prev_count_right = 0;
   clearCounters();
-  /*
-  analogWrite(LR, val);
-  analogWrite(RR, val);
-  analogWrite(LF, 0);
-  analogWrite(RF, 0);
-  */
+
 }
 
 unsigned long computeDeltaTicks(float ang) 
@@ -875,11 +832,7 @@ void left(float ang, float speed)
   clearCounters();
   
   speed_set(val, val, LEFT);
-/*
-  analogWrite(LR, val);
-  analogWrite(RF, val);
-  analogWrite(LF, 0);
-  analogWrite(RR, 0);*/
+
 }
 
 // Turn Alex right "ang" degrees at speed "speed".
@@ -900,22 +853,13 @@ void right(float ang, float speed)
 
   targetTicks = leftForwardTicksTurns + deltaTicks;
 
-  // For now we will ignore ang. We will fix this in Week 9.
-  // We will also replace this code with bare-metal later.
-  // To turn right we reverse the right wheel and move
-  // the left wheel forward.
 
   prev_count_left = 0;
   prev_count_right = 0;
   clearCounters();
  
   speed_set(val, val, RIGHT);
-  /*
-  analogWrite(RR, val);
-  analogWrite(LF, val);
-  analogWrite(LR, 0);
-  analogWrite(RF, 0);
-  */
+
 }
 
 // Stop Alex. To replace with bare-metal code later.
@@ -925,45 +869,10 @@ void stop()
 
   
   speed_set(0, 0, STOP);
-  //OCR0B = 0;
-  //OCR2A = 0;
-  //OCR2B = 0;
-  /*
-  analogWrite(LF, 0);
-  analogWrite(LR, 0);
-  analogWrite(RF, 0);
-  analogWrite(RR, 0);
-  */
+
 }
 
-/*
- * Alex's setup and run codes
- * 
- */
 
-/* 
-// Store the ticks from Alex's left and
-// right encoders.
-volatile unsigned long leftForwardTicks;
-volatile unsigned long rightForwardTicks;
-volatile unsigned long leftReverseTicks;
-volatile unsigned long rightReverseTicks;
-
-//Left and right encoder ticks for turning
-volatile unsigned long leftForwardTicksTurns;
-volatile unsigned long leftReverseTicksTurns;
-volatile unsigned long rightForwardTicksTurns;
-volatile unsigned long rightReverseTicksTurns;
-
-
-// Store the revolutions on Alex's left
-// and right wheels
-volatile unsigned long leftRevs;
-volatile unsigned long rightRevs;
-
-// Forward and backward distance traveled
-volatile float forwardDist;
-volatile float reverseDist; */
 
 // Clears all our counters
 void clearCounters()
@@ -1122,28 +1031,20 @@ void handlePacket(TPacket *packet)
 
 void loop() {
 
-// Uncomment the code below for Step 2 of Activity 3 in Week 8 Studio 2
 
-  //forward(1, 100);
-
-// Uncomment the code below for Week 9 Studio 2
-
-
-  //dbprint("Hello world");
- // put your main code here, to run repeatedly:
   TPacket recvPacket; // This holds commands from the Pi
   
   TResult result = readPacket(&recvPacket);
   
   if(result == PACKET_OK)
   {
-    //forward(2.0, 100);
+    
     handlePacket(&recvPacket);
   }
   else
     if(result == PACKET_BAD)
     {
-      //reverse(2.0, 100);
+      
       sendBadPacket();
     }
     else
