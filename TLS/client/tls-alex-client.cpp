@@ -56,7 +56,7 @@ void reset_count()
 
 void infinite_report(char *buffer, int32_t *params)
 {
-	//first, send out the command to retrieve how far each of the items hae travelled
+	//first, send out the command to retrieve how far each of the items has travelled
 	//once you send out the get status command and processed the status, we can then proceed
 	buffer[1] = 'g';
 	params[0] = 0;
